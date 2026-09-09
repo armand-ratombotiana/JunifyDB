@@ -80,14 +80,14 @@ During the deep-dive autonomous audit, several critical edge-case defects were d
 
 | Test Suite | Tests Run | Failures | Errors | Skipped | Pass Rate | Status |
 |---|---|---|---|---|---|---|
-| **Core Database Engine (`junify-db-core`)** | 489 | 0 | 0 | 0 | 100% | **GREEN** |
+| **Core Database Engine (`junify-db-core`)** | 491 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Spring Boot Demo (`spring-boot-demo`)** | 3 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Quarkus Demo (`quarkus-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Micronaut Demo (`micronaut-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Eclipse Vert.x Demo (`vertx-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Multi-Engine E2E Validation (`end-to-end-validation`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Spring Boot Starter Unit Tests** | 3 | 0 | 0 | 0 | 100% | **GREEN** |
-| **TOTAL** | **511** | **0** | **0** | **0** | **100.0%** | **ALL PASSED** |
+| **TOTAL** | **513** | **0** | **0** | **0** | **100.0%** | **ALL PASSED** |
 
 ---
 

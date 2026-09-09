@@ -116,6 +116,29 @@ class JunifyDBServerTest {
         assertNull(db.keyValueBucket("cache").get("key1"), "Key should be deleted");
     }
 
+    @Test
+    void listCollections() throws Exception {
+        db.documentCollection("products").insert(Document.of("name", "Laptop"));
+        db.documentCollection("orders").insert(Document.of("total", 100));
+
+        var response = get("/api/collections");
+        assertEquals(200, response.code, "List collections should return 200");
+        assertTrue(response.body.contains("products"), "Response should contain products collection");
+        assertTrue(response.body.contains("orders"), "Response should contain orders collection");
+    }
+
+    @Test
+    void authLoginAndLogout() throws Exception {
+        var loginResp = post("/api/auth/login", "{\"username\":\"admin\",\"password\":\"secret\"}");
+        assertEquals(200, loginResp.code, "Login should return 200");
+        assertTrue(loginResp.body.contains("authenticated"), "Should contain authenticated status");
+        assertTrue(loginResp.body.contains("session"), "Should return session ID");
+
+        var logoutResp = post("/api/auth/logout", "");
+        assertEquals(200, logoutResp.code, "Logout should return 200");
+        assertTrue(logoutResp.body.contains("logged_out"), "Should return logged_out status");
+    }
+
     private record Response(int code, String body) {}
 
     private Response get(String path) throws Exception {

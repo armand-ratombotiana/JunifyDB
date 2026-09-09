@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JunifyDB — Sign In</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #0d1117;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            color: #c9d1d9;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .login-card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 400px;
+            padding: 32px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .login-logo {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 12px;
+        }
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f0f6fc;
+            margin: 0 0 8px 0;
+        }
+        .login-subtitle {
+            font-size: 0.875rem;
+            color: #8b949e;
+            margin: 0;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #c9d1d9;
+            margin-bottom: 6px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            background-color: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #f0f6fc;
+            font-size: 0.875rem;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-input:focus {
+            outline: none;
+            border-color: #58a6ff;
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.3);
+        }
+        .btn-submit {
+            width: 100%;
+            padding: 10px 16px;
+            background-color: #238636;
+            color: #ffffff;
+            border: 1px solid rgba(240, 246, 252, 0.1);
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-top: 8px;
+        }
+        .btn-submit:hover {
+            background-color: #2ea043;
+        }
+        .error-message {
+            display: none;
+            background-color: rgba(248, 81, 73, 0.15);
+            border: 1px solid #f85149;
+            color: #f85149;
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            margin-bottom: 16px;
+        }
+        .login-footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #8b949e;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-header">
+            <svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+            <h1 class="login-title">JunifyDB Console</h1>
+            <p class="login-subtitle">Sign in to manage embedded database</p>
+        </div>
+
+        <div id="errorMessage" class="error-message" role="alert"></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input class="form-input" type="text" id="username" name="username" value="admin" autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input class="form-input" type="password" id="password" name="password" autocomplete="current-password">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="apiKey">API Key (Optional)</label>
+                <input class="form-input" type="password" id="apiKey" name="apiKey" placeholder="Leave blank if disabled">
+            </div>
+
+            <button type="submit" class="btn-submit" id="submitBtn">Sign In</button>
+        </form>
+
+        <div class="login-footer">
+            JunifyDB Embedded Multi-Model Database
+        </div>
+    </div>
+
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const errorEl = document.getElementById('errorMessage');
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const apiKey = document.getElementById('apiKey').value.trim();
+
+            errorEl.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in...';
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, apiKey })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (apiKey) {
+                        localStorage.setItem('apiKey', apiKey);
+                    }
+                    window.location.href = '/index.html';
+                } else {
+                    const err = await res.json().catch(() => ({ message: 'Sign in failed' }));
+                    errorEl.textContent = err.message || 'Invalid credentials or API key';
+                    errorEl.style.display = 'block';
+                }
+            } catch (err) {
+                // If auth is not enabled on server, direct redirect
+                if (apiKey) localStorage.setItem('apiKey', apiKey);
+                window.location.href = '/index.html';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign In';
+            }
+        }
+    </script>
+</body>
+</html>

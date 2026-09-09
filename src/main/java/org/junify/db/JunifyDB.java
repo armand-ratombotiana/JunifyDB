@@ -74,6 +74,11 @@ public class JunifyDB implements Closeable {
         return col;
     }
 
+    public java.util.Set<String> getCollectionNames() {
+        checkOpen();
+        return java.util.Collections.unmodifiableSet(collections.keySet());
+    }
+
     public KeyValueBucket keyValueBucket(String name) {
         checkOpen();
         return buckets.computeIfAbsent(name, n -> {
@@ -132,8 +137,6 @@ public class JunifyDB implements Closeable {
     public CDCManager cdcManager() {
         return cdcManager;
     }
-
-
 
     public JunifyDBServer startServer(int port) throws IOException {
         checkOpen();

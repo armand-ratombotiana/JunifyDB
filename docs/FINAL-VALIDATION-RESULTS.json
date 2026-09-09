@@ -5,17 +5,17 @@
   "status": "RELEASE_READY",
   "overallPassRate": "100.0%",
   "testExecution": {
-    "totalTests": 511,
-    "passed": 511,
+    "totalTests": 513,
+    "passed": 513,
     "failed": 0,
     "errors": 0,
     "skipped": 0,
     "suites": [
       {
         "name": "junify-db-core",
-        "tests": 489,
+        "tests": 491,
         "status": "PASS",
-        "durationSeconds": 30.787
+        "durationSeconds": 30.401
       },
       {
         "name": "spring-boot-starter",

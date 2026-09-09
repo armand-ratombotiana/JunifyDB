@@ -179,10 +179,26 @@ public class JunifyDBServer {
     }
 
 
+    private final SecureSessionManager sessionManager = new SecureSessionManager();
+
     private boolean isAuthValid(HttpExchange exchange) {
         if (!authEnabled) return true;
         var authHeader = exchange.getRequestHeaders().getFirst("X-API-Key");
-        return apiKey != null && apiKey.equals(authHeader);
+        if (apiKey != null && apiKey.equals(authHeader)) {
+            return true;
+        }
+        var bearerHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (bearerHeader != null && bearerHeader.startsWith("Bearer ") && apiKey != null && apiKey.equals(bearerHeader.substring(7))) {
+            return true;
+        }
+        String sessionId = sessionManager.getSessionIdFromCookie(exchange);
+        if (sessionId != null) {
+            SessionInfo session = sessions.get(sessionId);
+            if (session != null && session.expiresAt() > System.currentTimeMillis()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void sendAuthError(HttpExchange exchange) throws IOException {
@@ -306,7 +322,9 @@ public class JunifyDBServer {
      */
     private void registerHandlers(HttpServer httpServer) {
         httpServer.createContext("/", new StaticHandler());
-        httpServer.createContext("/api/collections/", new CollectionsHandler());
+        httpServer.createContext("/api/collections", new CollectionsHandler());
+        httpServer.createContext("/api/auth/login", new AuthLoginHandler());
+        httpServer.createContext("/api/auth/logout", new AuthLogoutHandler());
         httpServer.createContext("/api/kv/", new KeyValueHandler());
         httpServer.createContext("/api/kv/lists/", new ListHandler());
         httpServer.createContext("/api/kv/sets/", new SetHandler());
@@ -399,7 +417,68 @@ public void stop() {
         }
     }
 
-private class StaticHandler implements HttpHandler {
+    private class AuthLoginHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsHeaders(exchange);
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+                return;
+            }
+            try {
+                var body = readBody(exchange);
+                @SuppressWarnings("unchecked")
+                var req = (body == null || body.trim().isEmpty())
+                        ? Map.of()
+                        : JsonSerde.fromJson(body, Map.class);
+                String user = req.get("username") != null ? req.get("username").toString() : "admin";
+                String key = req.get("apiKey") != null ? req.get("apiKey").toString() : null;
+
+                if (authEnabled && apiKey != null) {
+                    if (key != null && !key.equals(apiKey)) {
+                        sendJson(exchange, 401, Map.of("error", "Unauthorized", "message", "Invalid API key"));
+                        return;
+                    }
+                }
+
+                String sessionId = sessionManager.generateSessionId();
+                sessions.put(sessionId, new SessionInfo(user, System.currentTimeMillis() + SESSION_TTL_MS));
+                sessionManager.setSessionCookie(exchange, sessionId, sslPort > 0);
+
+                sendJson(exchange, 200, Map.of(
+                    "status", "authenticated",
+                    "session", sessionId,
+                    "token", sessionId,
+                    "username", user
+                ));
+            } catch (Exception e) {
+                sendJson(exchange, 500, Map.of("error", "Authentication error", "message", e.getMessage() != null ? e.getMessage() : "Unknown"));
+            }
+        }
+    }
+
+    private class AuthLogoutHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsHeaders(exchange);
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            String sessionId = sessionManager.getSessionIdFromCookie(exchange);
+            if (sessionId != null) {
+                sessions.remove(sessionId);
+            }
+            sessionManager.clearSessionCookie(exchange);
+            sendJson(exchange, 200, Map.of("status", "logged_out"));
+        }
+    }
+
+    private class StaticHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             var path = exchange.getRequestURI().getPath();
@@ -469,10 +548,14 @@ private class StaticHandler implements HttpHandler {
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
-            // /api/collections/ with no additional path - list info
+            // /api/collections with no additional path - list collections
             if (parts.length < 4 || parts[3].isEmpty()) {
                 if ("GET".equals(exchange.getRequestMethod())) {
-                    sendJson(exchange, 200, Map.of("collections", "use /api/collections/{name}"));
+                    var cols = new java.util.ArrayList<Map<String, Object>>();
+                    for (String colName : db.getCollectionNames()) {
+                        cols.add(Map.of("name", colName, "count", (long) db.documentCollection(colName).count()));
+                    }
+                    sendJson(exchange, 200, Map.of("collections", cols));
                 } else {
                     sendJson(exchange, 405, Map.of("error", "Method not allowed"));
                 }
