@@ -2,7 +2,6 @@ package org.junify.db.console.http;
 
 import com.sun.net.httpserver.HttpExchange;
 
-import java.net.HttpCookie;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -13,7 +12,7 @@ import java.util.Base64;
  * - Secure random session ID generation (256-bit)
  * - HttpOnly cookies (XSS protection)
  * - Secure flag (HTTPS only)
- * - SameSite=Strict (CSRF protection)
+ * - SameSite=Strict/Lax
  * - Configurable TTL with absolute maximum
  */
 public class SecureSessionManager {
@@ -21,10 +20,26 @@ public class SecureSessionManager {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int SESSION_ID_BYTES = 32;  // 256 bits
     
-    // Session configuration
-    private static final long SESSION_TTL_MS = 30 * 60 * 1000;   // 30 minutes
-    private static final long ABSOLUTE_TTL_MS = 8 * 60 * 60 * 1000;  // 8 hours max
+    // Session configuration defaults
+    public static final long DEFAULT_SESSION_TTL_MS = 30 * 60 * 1000L;   // 30 minutes
+    public static final long DEFAULT_ABSOLUTE_TTL_MS = 8 * 60 * 60 * 1000L;  // 8 hours max
     private static final int MAX_SESSIONS_PER_USER = 5;
+
+    private final long sessionTtlMs;
+    private final long absoluteTtlMs;
+
+    public SecureSessionManager() {
+        this(DEFAULT_SESSION_TTL_MS, DEFAULT_ABSOLUTE_TTL_MS);
+    }
+
+    public SecureSessionManager(long sessionTtlMs) {
+        this(sessionTtlMs, Math.max(sessionTtlMs, DEFAULT_ABSOLUTE_TTL_MS));
+    }
+
+    public SecureSessionManager(long sessionTtlMs, long absoluteTtlMs) {
+        this.sessionTtlMs = sessionTtlMs > 0 ? sessionTtlMs : DEFAULT_SESSION_TTL_MS;
+        this.absoluteTtlMs = absoluteTtlMs > 0 ? absoluteTtlMs : DEFAULT_ABSOLUTE_TTL_MS;
+    }
     
     /**
      * Generate a cryptographically secure session ID
@@ -39,19 +54,13 @@ public class SecureSessionManager {
      * Set secure session cookie
      */
     public void setSessionCookie(HttpExchange exchange, String sessionId, boolean secure) {
-        HttpCookie cookie = new HttpCookie("JUNIFY_SESSION", sessionId);
-        cookie.setHttpOnly(true);  // Prevent XSS access
-        cookie.setSecure(secure);  // Only over HTTPS
-        cookie.setPath("/");
-        cookie.setMaxAge(SESSION_TTL_MS / 1000);
-        
-        // SameSite=Strict for maximum CSRF protection
+        long maxAgeSec = sessionTtlMs / 1000L;
         String setCookieHeader = String.format(
-            "%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
-            cookie.toString(),
-            SESSION_TTL_MS / 1000
+            "JUNIFY_SESSION=%s; Path=/; Max-Age=%d; HttpOnly%s; SameSite=Lax",
+            sessionId,
+            maxAgeSec,
+            secure ? "; Secure" : ""
         );
-        
         exchange.getResponseHeaders().add("Set-Cookie", setCookieHeader);
     }
     
@@ -59,7 +68,7 @@ public class SecureSessionManager {
      * Clear session cookie (logout)
      */
     public void clearSessionCookie(HttpExchange exchange) {
-        String setCookieHeader = "JUNIFY_SESSION=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict";
+        String setCookieHeader = "JUNIFY_SESSION=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax";
         exchange.getResponseHeaders().add("Set-Cookie", setCookieHeader);
     }
     
@@ -73,8 +82,12 @@ public class SecureSessionManager {
         for (String cookieHeader : cookies) {
             for (String cookie : cookieHeader.split(";")) {
                 String[] parts = cookie.trim().split("=", 2);
-                if (parts.length == 2 && "JUNIFY_SESSION".equals(parts[0])) {
-                    return parts[1];
+                if (parts.length == 2 && "JUNIFY_SESSION".equalsIgnoreCase(parts[0].trim())) {
+                    String val = parts[1].trim();
+                    if (val.startsWith("\"") && val.endsWith("\"") && val.length() >= 2) {
+                        val = val.substring(1, val.length() - 1);
+                    }
+                    return val;
                 }
             }
         }
@@ -85,14 +98,14 @@ public class SecureSessionManager {
      * Get session TTL in milliseconds
      */
     public long getSessionTtlMs() {
-        return SESSION_TTL_MS;
+        return sessionTtlMs;
     }
     
     /**
      * Get absolute session TTL
      */
     public long getAbsoluteTtlMs() {
-        return ABSOLUTE_TTL_MS;
+        return absoluteTtlMs;
     }
     
     /**

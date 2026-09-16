@@ -3,7 +3,28 @@ server:
 
 junifydb:
   enabled: true
-  engine: IN_MEMORY
+  storage-engine: IN_MEMORY
   data-dir: data/spring-demo
   auto-flush: true
   flush-interval-ms: 1000
+  console:
+    enabled: true
+    port: 9090
+    context-path: /junify-console
+    intelligent-port: true
+    max-port-attempts: 50
+    host: 127.0.0.1
+    scheme: http
+    fail-if-preferred-port-unavailable: false
+    localhost-only: true
+  security:
+    auth-enabled: true
+    admin-username: admin
+    admin-password: ${JNOSQL_ADMIN_PASSWORD:admin-secret-pass}
+    cors-enabled: false
+    csrf-enabled: false
+    rate-limit-enabled: true
+    rate-limit-requests-per-minute: 120
+    brute-force-protection-enabled: true
+    max-failed-login-attempts: 5
+    security-headers-enabled: true

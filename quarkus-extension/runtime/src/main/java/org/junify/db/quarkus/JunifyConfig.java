@@ -4,16 +4,10 @@ import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 import org.junify.db.config.JunifyDBConfig.StorageEngineType;
 
+import java.util.Optional;
+
 /**
  * Quarkus SmallRye Config mapping for the {@code junifydb.*} configuration prefix.
- *
- * <p>Usage in {@code application.properties}:
- * <pre>
- * junifydb.engine=IN_MEMORY
- * junifydb.data-dir=data
- * junifydb.auto-flush=true
- * junifydb.flush-interval-ms=1000
- * </pre>
  */
 @ConfigMapping(prefix = "junifydb")
 public interface JunifyConfig {
@@ -29,6 +23,39 @@ public interface JunifyConfig {
 
     @WithDefault("1000")
     int flushIntervalMs();
+
+    ConsoleConfig console();
+
+    SecurityConfig security();
+
+    interface ConsoleConfig {
+        @WithDefault("false")
+        boolean enabled();
+
+        @WithDefault("8080")
+        int port();
+
+        @WithDefault("/")
+        String path();
+
+        @WithDefault("true")
+        boolean intelligentPort();
+    }
+
+    interface SecurityConfig {
+        @WithDefault("false")
+        boolean enabled();
+
+        Optional<String> apiKey();
+
+        @WithDefault("admin")
+        String adminUsername();
+
+        Optional<String> adminPassword();
+
+        @WithDefault("true")
+        boolean corsEnabled();
+    }
 
     default StorageEngineType getEngine() { return engine(); }
     default String getDataDir() { return dataDir(); }

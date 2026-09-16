@@ -35,6 +35,7 @@ public class JunifyDB implements Closeable {
     private final EventBus eventBus;
     private final DatabaseMetrics metrics;
     private final CDCManager cdcManager;
+    private final org.junify.db.sql.engine.SqlEngine sqlEngine;
     private volatile boolean closed;
     private JunifyDBServer server;
 
@@ -51,6 +52,7 @@ public class JunifyDB implements Closeable {
         this.eventBus = new EventBus();
         this.metrics = new DatabaseMetrics();
         this.cdcManager = new CDCManager();
+        this.sqlEngine = new org.junify.db.sql.engine.SqlEngine(this);
         this.closed = false;
     }
 
@@ -58,8 +60,61 @@ public class JunifyDB implements Closeable {
         return JunifyDBConfig.builder();
     }
 
+    /**
+     * Creates an ultra-fast, zero-configuration in-memory embedded database.
+     * Ideal for unit tests, rapid prototyping, and ephemeral services.
+     */
+    public static JunifyDB inMemory() {
+        return JunifyDBConfig.builder()
+                .storageEngine(JunifyDBConfig.StorageEngineType.IN_MEMORY)
+                .build();
+    }
+
+    /**
+     * Creates a temporary file-based embedded database in java.io.tmpdir
+     * with an automated JVM shutdown hook for directory cleanup.
+     */
+    public static JunifyDB openTemp() {
+        try {
+            var tempDir = java.nio.file.Files.createTempDirectory("junifydb-temp-");
+            var db = JunifyDBConfig.builder()
+                    .storageEngine(JunifyDBConfig.StorageEngineType.FILE)
+                    .dataDir(tempDir.toString())
+                    .build();
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try {
+                    db.close();
+                    deleteDirectoryRecursively(tempDir.toFile());
+                } catch (Exception ignored) {}
+            }));
+            return db;
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to create temporary JunifyDB: " + e.getMessage(), e);
+        }
+    }
+
+    private static void deleteDirectoryRecursively(java.io.File dir) {
+        if (dir == null || !dir.exists()) return;
+        var files = dir.listFiles();
+        if (files != null) {
+            for (var f : files) {
+                if (f.isDirectory()) deleteDirectoryRecursively(f);
+                else f.delete();
+            }
+        }
+        dir.delete();
+    }
+
     public static JunifyDB create(JunifyDBConfig config) {
-        return new JunifyDB(config);
+        var db = new JunifyDB(config);
+        if (config.consoleConfig() != null && config.consoleConfig().enabled()) {
+            try {
+                db.startConsoleServer(config.consoleConfig(), config.securityConfig());
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to start JunifyDB console server: " + e.getMessage(), e);
+            }
+        }
+        return db;
     }
 
     public DocumentCollection documentCollection(String name) {
@@ -77,6 +132,54 @@ public class JunifyDB implements Closeable {
     public java.util.Set<String> getCollectionNames() {
         checkOpen();
         return java.util.Collections.unmodifiableSet(collections.keySet());
+    }
+
+    /**
+     * Executes an ANSI SQL statement against JunifyDB's collections/tables.
+     */
+    public org.junify.db.sql.SqlResultSet sql(String sql, Object... params) {
+        checkOpen();
+        return sqlEngine.execute(sql, params);
+    }
+
+    /**
+     * Executes an ANSI SQL query and maps the result rows to an entity class.
+     */
+    public <T> java.util.List<T> sql(String sql, Class<T> entityClass, Object... params) {
+        checkOpen();
+        return sqlEngine.execute(sql, params).mapTo(entityClass);
+    }
+
+    /**
+     * Starts a fluent, type-safe entity query builder for the given entity class.
+     */
+    public <T> org.junify.db.api.EntityQuery<T> from(Class<T> entityClass) {
+        checkOpen();
+        return new org.junify.db.api.EntityQuery<>(this, entityClass);
+    }
+
+    /**
+     * Eagerly registers one or more entity classes, creating collections
+     * and secondary indexes based on annotations.
+     */
+    public void registerEntity(Class<?>... entityClasses) {
+        checkOpen();
+        if (entityClasses == null) return;
+        for (Class<?> clazz : entityClasses) {
+            if (clazz == null) continue;
+            String colName = org.junify.db.adapter.jnosql.EntityMapper.getCollectionName(clazz);
+            var col = documentCollection(colName);
+            for (var field : clazz.getDeclaredFields()) {
+                if (org.junify.db.adapter.jnosql.EntityMapper.isNaturalId(field)) {
+                    String colFieldName = org.junify.db.adapter.jnosql.EntityMapper.resolveColumnName(field);
+                    col.createIndex(colFieldName);
+                }
+            }
+        }
+    }
+
+    public org.junify.db.sql.engine.SqlEngine sqlEngine() {
+        return sqlEngine;
     }
 
     public KeyValueBucket keyValueBucket(String name) {
@@ -140,9 +243,44 @@ public class JunifyDB implements Closeable {
 
     public JunifyDBServer startServer(int port) throws IOException {
         checkOpen();
+        if (server != null) {
+            server.stop();
+        }
         server = new JunifyDBServer(this);
+        if (config.securityConfig() != null && config.securityConfig().authEnabled()) {
+            server.applySecurityConfig(config.securityConfig());
+        }
         server.start(port);
         return server;
+    }
+
+    public JunifyDBServer startConsoleServer(org.junify.db.config.ConsoleConfig consoleConfig, org.junify.db.config.SecurityConfig securityConfig) throws IOException {
+        checkOpen();
+        if (server != null) {
+            server.stop();
+        }
+        server = new JunifyDBServer(this);
+        if (securityConfig != null) {
+            server.applySecurityConfig(securityConfig);
+        }
+        server.startIntelligent(consoleConfig != null ? consoleConfig : org.junify.db.config.ConsoleConfig.builder().enabled(true).build());
+        return server;
+    }
+
+    public JunifyDBServer server() {
+        return server;
+    }
+
+    public JunifyDBServer consoleServer() {
+        return server;
+    }
+
+    public String consoleUrl() {
+        return server != null ? server.getConsoleUrl() : null;
+    }
+
+    public int consolePort() {
+        return server != null ? server.port() : -1;
     }
 
     public JunifyDBConfig config() {
@@ -151,6 +289,10 @@ public class JunifyDB implements Closeable {
 
     public boolean isOpen() {
         return !closed;
+    }
+
+    public boolean isClosed() {
+        return closed;
     }
 
     @Override

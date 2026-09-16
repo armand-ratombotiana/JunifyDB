@@ -36,14 +36,39 @@ public class JunifyDBProducer {
     @Singleton
     @DefaultBean
     public JunifyDB createDatabase() {
-        return JunifyDB.create(
-                JunifyDB.embed()
-                        .storageEngine(config.getEngine())
-                        .persistTo(config.getDataDir())
-                        .autoFlush(config.isAutoFlush())
-                        .flushIntervalMs(config.getFlushIntervalMs())
-                        .buildConfig()
-        );
+        var builder = JunifyDB.embed()
+                .storageEngine(config.getEngine())
+                .persistTo(config.getDataDir())
+                .autoFlush(config.isAutoFlush())
+                .flushIntervalMs(config.getFlushIntervalMs());
+
+        if (config.console() != null) {
+            builder.console(org.junify.db.config.ConsoleConfig.builder()
+                    .enabled(config.console().enabled())
+                    .port(config.console().port())
+                    .contextPath(config.console().path())
+                    .intelligentPort(config.console().intelligentPort())
+                    .build());
+        }
+
+        if (config.security() != null) {
+            var secBuilder = org.junify.db.config.SecurityConfig.builder()
+                    .authEnabled(config.security().enabled())
+                    .adminUsername(config.security().adminUsername())
+                    .corsEnabled(config.security().corsEnabled());
+            config.security().apiKey().ifPresent(secBuilder::apiKey);
+            config.security().adminPassword().ifPresent(secBuilder::adminPassword);
+            builder.security(secBuilder.build());
+        }
+
+        return JunifyDB.create(builder.buildConfig());
+    }
+
+    @Produces
+    @Singleton
+    @DefaultBean
+    public org.junify.db.console.http.JunifyDBServer consoleServer(JunifyDB db) {
+        return db.consoleServer();
     }
 
     @Produces

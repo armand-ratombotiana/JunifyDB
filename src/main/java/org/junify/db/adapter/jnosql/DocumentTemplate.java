@@ -56,6 +56,11 @@ public interface DocumentTemplate {
     <T, ID> Optional<T> find(Class<T> entityClass, ID id);
 
     /**
+     * Check if an entity exists by ID.
+     */
+    <T, ID> boolean existsById(Class<T> entityClass, ID id);
+
+    /**
      * Find all entities of a given type.
      */
     <T> List<T> findAll(Class<T> entityClass);

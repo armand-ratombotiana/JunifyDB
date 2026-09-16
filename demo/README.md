@@ -13,7 +13,8 @@ demo/
 ├── quarkus-demo/             # Quarkus 3.8.0 + JunifyDB CDI Extension demo
 ├── micronaut-demo/           # Micronaut 4.2.0 + JunifyDB DI Integration demo
 ├── vertx-demo/               # Eclipse Vert.x 4.5.4 Reactive non-blocking demo
-└── end-to-end-validation/    # Multi-engine lifecycle and durability verification
+├── end-to-end-validation/    # Multi-engine lifecycle and durability verification
+└── annotation-showcase-demo/ # Multi-standard annotations (JNoSQL, JPA, Hibernate) & SQL Engine
 ```
 
 ---
@@ -69,6 +70,14 @@ demo/
   - Transaction commit vs. rollback isolation.
   - Cold engine shutdown and persistence recovery verification on disk.
 
+### 7. [annotation-showcase-demo](file:///c:/Users/jratombo-adm/Desktop/JNoSQL-EMBED/demo/annotation-showcase-demo)
+- **Scope**: Multi-standard annotation interoperability & dual NoSQL/SQL querying.
+- **Key Highlights**:
+  - **Eclipse JNoSQL Standard**: Entity mapping with `@Entity`, `@Id`, `@Column` and type-safe `JunifyRepository`.
+  - **JPA Specification Standard**: Entity transactions, `JunifyEntityManager`, and `TypedQuery` with named parameter binding.
+  - **Hibernate Annotations**: Automated primary key generation (`@UuidGenerator`), audit timestamps (`@CreationTimestamp`, `@UpdateTimestamp`), computed columns (`@Formula`), and enum mappings (`@Enumerated`).
+  - **Dual Engine**: Unified ANSI SQL query engine running aggregations (`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP BY`) and relational `JOIN`s directly over NoSQL collections.
+
 ---
 
 ## Running the Demonstrations
@@ -93,4 +102,7 @@ cd ../vertx-demo && mvn test
 
 # Run Multi-Engine E2E Validation
 cd ../end-to-end-validation && mvn test
+
+# Run Annotation & Dual-Engine Showcase Demo
+cd ../annotation-showcase-demo && mvn test && mvn compile exec:java
 ```

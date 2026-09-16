@@ -1,0 +1,422 @@
+package org.junify.db.sql.engine;
+
+import org.junify.db.JunifyDB;
+import org.junify.db.nosql.document.Document;
+import org.junify.db.nosql.document.DocumentCollection;
+import org.junify.db.sql.SqlResultSet;
+import org.junify.db.sql.SqlRow;
+import org.junify.db.sql.ast.*;
+import org.junify.db.sql.ast.Expression.*;
+import org.junify.db.sql.ast.SqlStatement.*;
+import org.junify.db.sql.parser.SqlParser;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class SqlEngine {
+
+    private final JunifyDB db;
+
+    public SqlEngine(JunifyDB db) {
+        this.db = db;
+    }
+
+    public SqlResultSet execute(String sql, Object... params) {
+        List<Object> paramList = params != null ? Arrays.asList(params) : Collections.emptyList();
+        SqlStatement stmt = SqlParser.parse(sql);
+        return execute(stmt, paramList);
+    }
+
+    public SqlResultSet execute(SqlStatement stmt, List<Object> params) {
+        if (stmt instanceof SelectStatement select) {
+            return executeSelect(select, params);
+        } else if (stmt instanceof InsertStatement insert) {
+            return executeInsert(insert, params);
+        } else if (stmt instanceof UpdateStatement update) {
+            return executeUpdate(update, params);
+        } else if (stmt instanceof DeleteStatement delete) {
+            return executeDelete(delete, params);
+        } else if (stmt instanceof CreateTableStatement create) {
+            return executeCreateTable(create);
+        } else if (stmt instanceof DropTableStatement drop) {
+            return executeDropTable(drop);
+        }
+        throw new IllegalArgumentException("Unsupported statement type: " + stmt.getClass());
+    }
+
+    // -------------------------------------------------------------------------
+    // SELECT Execution
+    // -------------------------------------------------------------------------
+
+    private SqlResultSet executeSelect(SelectStatement select, List<Object> params) {
+        if (select.getFromTable() == null) {
+            // e.g. SELECT 1 + 1
+            Map<String, Object> emptyCtx = Collections.emptyMap();
+            Map<String, Object> rowData = new LinkedHashMap<>();
+            List<String> cols = new ArrayList<>();
+            for (SelectItem item : select.getSelectItems()) {
+                String name = item.getAlias() != null ? item.getAlias() : item.getExpression().toString();
+                rowData.put(name, item.getExpression().evaluate(emptyCtx, params));
+                cols.add(name);
+            }
+            return SqlResultSet.ofRows(List.of(new SqlRow(rowData, cols)), cols);
+        }
+
+        String primaryTableName = select.getFromTable().getTableName();
+        String primaryAlias = select.getFromTable().getAlias();
+        DocumentCollection col = db.documentCollection(primaryTableName);
+
+        // 1. Initial rows from FROM table
+        List<Map<String, Object>> workingRows = new ArrayList<>();
+        for (Document doc : col.findAll()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            // Map flat properties
+            if (doc.getId() != null) row.put("id", doc.getId());
+            doc.getFields().forEach(row::put);
+            // Map prefixed properties for qualified access (e.g. u.name)
+            if (primaryAlias != null) {
+                if (doc.getId() != null) row.put(primaryAlias + ".id", doc.getId());
+                doc.getFields().forEach((k, v) -> row.put(primaryAlias + "." + k, v));
+            }
+            workingRows.add(row);
+        }
+
+        // 2. JOINs
+        for (JoinClause join : select.getJoins()) {
+            String joinTableName = join.getTable().getTableName();
+            String joinAlias = join.getTable().getAlias();
+            DocumentCollection joinCol = db.documentCollection(joinTableName);
+            List<Document> joinDocs = joinCol.findAll();
+
+            List<Map<String, Object>> joinedRows = new ArrayList<>();
+
+            for (Map<String, Object> leftRow : workingRows) {
+                boolean matchedAny = false;
+
+                for (Document rightDoc : joinDocs) {
+                    Map<String, Object> combined = new LinkedHashMap<>(leftRow);
+                    // Add right table fields
+                    if (rightDoc.getId() != null) combined.put(joinAlias + ".id", rightDoc.getId());
+                    rightDoc.getFields().forEach((k, v) -> combined.put(joinAlias + "." + k, v));
+                    // Also non-prefixed if no collision
+                    if (!combined.containsKey("id") && rightDoc.getId() != null) combined.put("id", rightDoc.getId());
+                    rightDoc.getFields().forEach(combined::putIfAbsent);
+
+                    Object onResult = join.getOnCondition().evaluate(combined, params);
+                    if (Boolean.TRUE.equals(onResult)) {
+                        joinedRows.add(combined);
+                        matchedAny = true;
+                    }
+                }
+
+                // LEFT JOIN null padding
+                if (!matchedAny && join.getType() == JoinClause.JoinType.LEFT) {
+                    joinedRows.add(leftRow);
+                }
+            }
+
+            workingRows = joinedRows;
+        }
+
+        // 3. WHERE filtering
+        if (select.getWhereClause() != null) {
+            workingRows = workingRows.stream()
+                    .filter(row -> Boolean.TRUE.equals(select.getWhereClause().evaluate(row, params)))
+                    .collect(Collectors.toList());
+        }
+
+        // 4. Check for Aggregates
+        boolean hasAggregates = select.getSelectItems().stream()
+                .anyMatch(item -> item.getExpression() instanceof FunctionExpr fe && fe.isAggregate());
+
+        List<SqlRow> resultRows = new ArrayList<>();
+        List<String> columnNames = new ArrayList<>();
+
+        if (hasAggregates && select.getGroupBy().isEmpty()) {
+            // Single aggregate row across all matching items
+            Map<String, Object> aggRow = new LinkedHashMap<>();
+            for (SelectItem item : select.getSelectItems()) {
+                String colName = item.getAlias() != null ? item.getAlias() : item.getExpression().toString();
+                columnNames.add(colName);
+
+                if (item.getExpression() instanceof FunctionExpr fe && fe.isAggregate()) {
+                    aggRow.put(colName, computeAggregate(fe, workingRows, params));
+                } else {
+                    Object val = workingRows.isEmpty() ? null : item.getExpression().evaluate(workingRows.get(0), params);
+                    aggRow.put(colName, val);
+                }
+            }
+            resultRows.add(new SqlRow(aggRow, columnNames));
+        } else if (!select.getGroupBy().isEmpty()) {
+            // Group By processing
+            Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
+            for (Map<String, Object> row : workingRows) {
+                StringBuilder key = new StringBuilder();
+                for (Expression gbExpr : select.getGroupBy()) {
+                    key.append(gbExpr.evaluate(row, params)).append("___");
+                }
+                groups.computeIfAbsent(key.toString(), k -> new ArrayList<>()).add(row);
+            }
+
+            for (List<Map<String, Object>> groupRows : groups.values()) {
+                Map<String, Object> firstRow = groupRows.get(0);
+                Map<String, Object> rowData = new LinkedHashMap<>();
+                List<String> currentCols = new ArrayList<>();
+
+                for (SelectItem item : select.getSelectItems()) {
+                    String colName = item.getAlias() != null ? item.getAlias() : item.getExpression().toString();
+                    currentCols.add(colName);
+                    if (item.getExpression() instanceof FunctionExpr fe && fe.isAggregate()) {
+                        rowData.put(colName, computeAggregate(fe, groupRows, params));
+                    } else {
+                        rowData.put(colName, item.getExpression().evaluate(firstRow, params));
+                    }
+                }
+                columnNames = currentCols;
+                resultRows.add(new SqlRow(rowData, columnNames));
+            }
+        } else {
+            // Standard projections
+            for (Map<String, Object> row : workingRows) {
+                Map<String, Object> rowData = new LinkedHashMap<>();
+                List<String> currentCols = new ArrayList<>();
+
+                for (SelectItem item : select.getSelectItems()) {
+                    if (item.isWildcard()) {
+                        // Project all raw fields
+                        for (Map.Entry<String, Object> e : row.entrySet()) {
+                            if (!e.getKey().contains(".")) { // skip aliases
+                                rowData.put(e.getKey(), e.getValue());
+                                if (!currentCols.contains(e.getKey())) currentCols.add(e.getKey());
+                            }
+                        }
+                    } else {
+                        String colName = item.getAlias() != null ? item.getAlias() : item.getExpression().toString();
+                        if (item.getExpression() instanceof ColumnExpr ce && item.getAlias() == null) {
+                            colName = ce.getColumnName();
+                        }
+                        rowData.put(colName, item.getExpression().evaluate(row, params));
+                        if (!currentCols.contains(colName)) currentCols.add(colName);
+                    }
+                }
+                columnNames = currentCols;
+                resultRows.add(new SqlRow(rowData, columnNames));
+            }
+        }
+
+        // 5. DISTINCT
+        if (select.isDistinct()) {
+            Set<String> seen = new HashSet<>();
+            List<SqlRow> distinctRows = new ArrayList<>();
+            for (SqlRow r : resultRows) {
+                String rep = r.asMap().toString();
+                if (seen.add(rep)) {
+                    distinctRows.add(r);
+                }
+            }
+            resultRows = distinctRows;
+        }
+
+        // 6. ORDER BY
+        if (!select.getOrderBy().isEmpty()) {
+            resultRows.sort((r1, r2) -> {
+                for (OrderByItem ob : select.getOrderBy()) {
+                    Object v1 = ob.getExpression().evaluate(r1.asMap(), params);
+                    Object v2 = ob.getExpression().evaluate(r2.asMap(), params);
+                    int cmp = compareValues(v1, v2);
+                    if (cmp != 0) {
+                        return ob.isAscending() ? cmp : -cmp;
+                    }
+                }
+                return 0;
+            });
+        }
+
+        // 7. OFFSET & LIMIT
+        int offset = select.getOffset() != null ? select.getOffset() : 0;
+        int limit = select.getLimit() != null ? select.getLimit() : Integer.MAX_VALUE;
+
+        if (offset > 0 || limit < Integer.MAX_VALUE) {
+            int fromIdx = Math.min(offset, resultRows.size());
+            int toIdx = Math.min(fromIdx + limit, resultRows.size());
+            resultRows = resultRows.subList(fromIdx, toIdx);
+        }
+
+        return SqlResultSet.ofRows(resultRows, columnNames);
+    }
+
+    private Object computeAggregate(FunctionExpr fe, List<Map<String, Object>> rows, List<Object> params) {
+        String func = fe.getFunctionName();
+        if ("COUNT".equals(func)) {
+            if (fe.getArguments().isEmpty() || (fe.getArguments().get(0) instanceof ColumnExpr ce && "*".equals(ce.getColumnName()))) {
+                return (long) rows.size();
+            }
+            Expression arg = fe.getArguments().get(0);
+            long count = 0;
+            Set<Object> seen = new HashSet<>();
+            for (Map<String, Object> r : rows) {
+                Object val = arg.evaluate(r, params);
+                if (val != null) {
+                    if (fe.isDistinct()) {
+                        if (seen.add(val)) count++;
+                    } else {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+
+        if (fe.getArguments().isEmpty()) return null;
+        Expression arg = fe.getArguments().get(0);
+
+        List<Double> numbers = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            Object val = arg.evaluate(r, params);
+            if (val instanceof Number n) {
+                numbers.add(n.doubleValue());
+            } else if (val != null) {
+                try {
+                    numbers.add(Double.parseDouble(val.toString()));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+
+        if (numbers.isEmpty()) return null;
+
+        switch (func) {
+            case "SUM":
+                return numbers.stream().mapToDouble(Double::doubleValue).sum();
+            case "AVG":
+                return numbers.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+            case "MIN":
+                return numbers.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+            case "MAX":
+                return numbers.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+            default:
+                return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // INSERT Execution
+    // -------------------------------------------------------------------------
+
+    private SqlResultSet executeInsert(InsertStatement insert, List<Object> params) {
+        DocumentCollection col = db.documentCollection(insert.getTableName());
+        int count = 0;
+
+        for (List<Expression> rowExprs : insert.getRowsOfValues()) {
+            Document doc = new Document();
+            doc.add("_entity", insert.getTableName());
+
+            if (insert.getColumns().isEmpty()) {
+                // Without column names, map by index col_0, col_1...
+                for (int i = 0; i < rowExprs.size(); i++) {
+                    doc.add("col_" + i, rowExprs.get(i).evaluate(Collections.emptyMap(), params));
+                }
+            } else {
+                for (int i = 0; i < insert.getColumns().size() && i < rowExprs.size(); i++) {
+                    String colName = insert.getColumns().get(i);
+                    Object val = rowExprs.get(i).evaluate(Collections.emptyMap(), params);
+                    if ("id".equalsIgnoreCase(colName)) {
+                        doc.id(val != null ? val.toString() : null);
+                    } else {
+                        doc.add(colName, val);
+                    }
+                }
+            }
+
+            if (doc.getId() == null) {
+                doc.id(UUID.randomUUID().toString());
+            }
+
+            col.insert(doc);
+            count++;
+        }
+
+        return SqlResultSet.ofUpdate(count, "INSERT");
+    }
+
+    // -------------------------------------------------------------------------
+    // UPDATE Execution
+    // -------------------------------------------------------------------------
+
+    private SqlResultSet executeUpdate(UpdateStatement update, List<Object> params) {
+        DocumentCollection col = db.documentCollection(update.getTableName());
+        int count = 0;
+
+        for (Document doc : col.findAll()) {
+            Map<String, Object> ctx = new LinkedHashMap<>();
+            if (doc.getId() != null) ctx.put("id", doc.getId());
+            doc.getFields().forEach(ctx::put);
+
+            if (update.getWhereClause() == null || Boolean.TRUE.equals(update.getWhereClause().evaluate(ctx, params))) {
+                // Apply assignments
+                for (Map.Entry<String, Expression> assign : update.getAssignments().entrySet()) {
+                    String colName = assign.getKey();
+                    Object newVal = assign.getValue().evaluate(ctx, params);
+                    if ("id".equalsIgnoreCase(colName)) {
+                        doc.id(newVal != null ? newVal.toString() : null);
+                    } else {
+                        doc.add(colName, newVal);
+                    }
+                }
+                col.update(doc);
+                count++;
+            }
+        }
+
+        return SqlResultSet.ofUpdate(count, "UPDATE");
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE Execution
+    // -------------------------------------------------------------------------
+
+    private SqlResultSet executeDelete(DeleteStatement delete, List<Object> params) {
+        DocumentCollection col = db.documentCollection(delete.getTableName());
+        int count = 0;
+
+        for (Document doc : col.findAll()) {
+            Map<String, Object> ctx = new LinkedHashMap<>();
+            if (doc.getId() != null) ctx.put("id", doc.getId());
+            doc.getFields().forEach(ctx::put);
+
+            if (delete.getWhereClause() == null || Boolean.TRUE.equals(delete.getWhereClause().evaluate(ctx, params))) {
+                col.deleteById(doc.getId());
+                count++;
+            }
+        }
+
+        return SqlResultSet.ofUpdate(count, "DELETE");
+    }
+
+    // -------------------------------------------------------------------------
+    // DDL Execution
+    // -------------------------------------------------------------------------
+
+    private SqlResultSet executeCreateTable(CreateTableStatement create) {
+        db.documentCollection(create.getTableName());
+        return SqlResultSet.ofUpdate(0, "CREATE_TABLE");
+    }
+
+    private SqlResultSet executeDropTable(DropTableStatement drop) {
+        DocumentCollection col = db.documentCollection(drop.getTableName());
+        for (Document d : col.findAll()) {
+            col.deleteById(d.getId());
+        }
+        return SqlResultSet.ofUpdate(0, "DROP_TABLE");
+    }
+
+    private static int compareValues(Object a, Object b) {
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        if (a.equals(b)) return 0;
+        if (a instanceof Number na && b instanceof Number nb) {
+            return Double.compare(na.doubleValue(), nb.doubleValue());
+        }
+        return a.toString().compareToIgnoreCase(b.toString());
+    }
+}

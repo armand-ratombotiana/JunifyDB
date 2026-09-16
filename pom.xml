@@ -75,6 +75,47 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+
+        <!--
+            Eclipse JNoSQL Mapping API — optional, provided.
+            Allows entities annotated with jakarta.nosql.@Entity / @Id / @Column
+            to be mapped transparently. Users who want JNoSQL annotations must add
+            this dependency to their own project; JunifyDB detects it via reflection.
+        -->
+        <dependency>
+            <groupId>org.eclipse.jnosql.mapping</groupId>
+            <artifactId>jnosql-mapping-api-core</artifactId>
+            <version>1.1.8</version>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Jakarta Persistence (JPA / Hibernate) API — optional, provided.
+            Allows entities annotated with jakarta.persistence.@Entity / @Id /
+            @Column / @Transient to be used directly with JunifyDB without any
+            JPA runtime. Detected at runtime via reflection; zero-impact if absent.
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <version>3.1.0</version>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            Hibernate Core (Annotations & Utilities) — optional, provided.
+            Enables org.hibernate.annotations.* (@CreationTimestamp, @UpdateTimestamp,
+            @UuidGenerator, @Formula, @NaturalId, @Immutable, etc.).
+        -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>6.4.4.Final</version>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 
     <build>

@@ -81,16 +81,43 @@ During the deep-dive autonomous audit, several critical edge-case defects were d
 | Test Suite | Tests Run | Failures | Errors | Skipped | Pass Rate | Status |
 |---|---|---|---|---|---|---|
 | **Core Database Engine (`junify-db-core`)** | 491 | 0 | 0 | 0 | 100% | **GREEN** |
-| **Spring Boot Demo (`spring-boot-demo`)** | 3 | 0 | 0 | 0 | 100% | **GREEN** |
+| **Spring Boot Starter (`junify-db-spring-boot-starter`)** | 12 | 0 | 0 | 0 | 100% | **GREEN** |
+| **Spring Boot Demo (`spring-boot-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Quarkus Demo (`quarkus-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Micronaut Demo (`micronaut-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Eclipse Vert.x Demo (`vertx-demo`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
 | **Multi-Engine E2E Validation (`end-to-end-validation`)** | 4 | 0 | 0 | 0 | 100% | **GREEN** |
-| **Spring Boot Starter Unit Tests** | 3 | 0 | 0 | 0 | 100% | **GREEN** |
-| **TOTAL** | **513** | **0** | **0** | **0** | **100.0%** | **ALL PASSED** |
+| **TOTAL** | **523** | **0** | **0** | **0** | **100.0%** | **ALL PASSED** |
 
 ---
 
-## 5. Release Recommendation
+## 5. Administration Console Configuration, Security Hardening & Evidence
 
-JunifyDB version **1.0.0-GA** satisfies all release readiness criteria, exhibits zero test regressions, provides production-ready starter integrations, and is accompanied by comprehensive architectural and operational documentation.
+As part of the final engineering phase, the embedded administration console and REST interface were upgraded to enterprise production readiness:
+
+1. **Configurable Console URL**:
+   - Programmatic (`ConsoleConfig.builder()`), system properties (`junifydb.console.*`), and environment variables (`JUNIFYDB_CONSOLE_*`).
+   - Customizable `scheme`, `host`, `port`, and `contextPath` with normalization.
+   - Spring Boot starter support via `junifydb.console.*` in `application.yml`.
+2. **Authoritative Intelligent Port Management**:
+   - Zero-collision automatic port resolution with fallback probing across configurable ranges `[minPort, maxPort]`.
+   - Ephemeral port support (`port: 0`) for collision-free parallel integration testing.
+   - Strict binding mode (`failIfPreferredPortUnavailable: true`) and clear diagnostic logging.
+3. **Defense-in-Depth Security**:
+   - OWASP Synchronizer Token Pattern CSRF protection (`X-CSRF-Token`).
+   - Rate-limiting sliding window with HTTP 429 backoff.
+   - Automatic brute-force credential stuffing lockout per client IP.
+   - Response security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, CSP, Referrer-Policy).
+   - Localhost-only binding (`127.0.0.1`) by default.
+4. **Automated Evidence**:
+   - `AdminConsoleConfigTest` (5 tests): Configuration defaults, bounds, and precedence resolution.
+   - `PortManagementTest` (6 tests): Port collision avoidance, range constraints, and clean release.
+   - `SecurityEnforcementTest` (5 tests): Authentication barrier, brute-force lockout, CSRF enforcement, logout, and security headers.
+   - `ConsoleFeatureValidationTest` (16 tests): Full CRUD, query engine, indexes, vectors, backup, CDC, and audit logging.
+   - **Console Test Total: 32 tests, 0 failures, 0 errors, 100% pass rate.**
+
+---
+
+## 6. Release Recommendation
+
+JunifyDB version **1.0.0-GA** satisfies all release readiness criteria, exhibits zero test regressions, provides production-ready starter integrations, configurable administration console with intelligent port management and OWASP security, and is accompanied by comprehensive architectural and operational documentation.

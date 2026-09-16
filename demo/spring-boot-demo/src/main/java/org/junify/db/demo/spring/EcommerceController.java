@@ -24,7 +24,13 @@ public class EcommerceController {
     }
 
     @GetMapping("/products")
-    public List<Product> getAllProducts(@RequestParam(required = false) String category) {
+    public List<Product> getAllProducts(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) Double maxPrice) {
+        if (category != null && minPrice != null && maxPrice != null) {
+            return productService.findProductsWithSql(category, minPrice, maxPrice);
+        }
         if (category != null && !category.isBlank()) {
             return productService.findByCategory(category);
         }

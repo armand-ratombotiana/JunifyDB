@@ -49,4 +49,11 @@ public class ProductService {
     public long count() {
         return collection().count();
     }
+
+    public List<Product> findProductsWithSql(String category, double minPrice, double maxPrice) {
+        return template.database().sql(
+                "SELECT * FROM " + COLLECTION + " WHERE category = ? AND price BETWEEN ? AND ? ORDER BY price ASC",
+                category, minPrice, maxPrice
+        ).stream().map(row -> Product.fromDocument(row.asDocument())).collect(Collectors.toList());
+    }
 }

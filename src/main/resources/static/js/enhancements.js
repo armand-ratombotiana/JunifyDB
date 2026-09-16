@@ -1099,3 +1099,202 @@ if (document.readyState === 'loading') {
 } else {
     _safeInit();
 }
+
+
+// ============================================================================
+// SQL STUDIO ENHANCEMENTS: SCHEMA EXPLORER & EXPORT ACTIONS
+// ============================================================================
+
+window.__lastSqlResult = null;
+
+/**
+ * Load available collections/tables into the SQL Studio left sidebar
+ */
+async function loadSqlSchemaExplorer() {
+    const listEl = document.getElementById('sqlTableList');
+    const countEl = document.getElementById('sqlTableCount');
+    if (!listEl) return;
+
+    try {
+        let cols = window.collections;
+        if (!cols || cols.length === 0) {
+            const apiBase = typeof API !== 'undefined' ? API : '/api';
+            const data = await fetchJSON(`${apiBase}/collections`);
+            if (Array.isArray(data)) {
+                cols = data;
+                window.collections = data;
+            }
+        }
+
+        if (!cols || cols.length === 0) {
+            listEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;padding:8px;text-align:center;">No collections found.<br>Create one in Collections tab.</div>';
+            if (countEl) countEl.textContent = '0';
+            return;
+        }
+
+        if (countEl) countEl.textContent = String(cols.length);
+
+        listEl.innerHTML = cols.map(c => {
+            const name = typeof c === 'string' ? c : (c.name || 'unnamed');
+            const docCount = typeof c === 'object' && c.count != null ? c.count : '';
+            return `
+                <div class="sql-table-item" onclick="insertSqlTableQuery('${escapeHtml(name)}')" title="Click to query table ${escapeHtml(name)}">
+                    <span style="font-weight:500;">${escapeHtml(name)}</span>
+                    ${docCount !== '' ? `<span class="badge badge-info">${docCount}</span>` : '<span class="badge" style="background:rgba(6,182,212,0.15);color:#22d3ee;">Table</span>'}
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        listEl.innerHTML = `<div style="color:var(--error);font-size:0.75rem;padding:8px;">Failed to load tables: ${escapeHtml(err.message)}</div>`;
+    }
+}
+
+/**
+ * Insert SELECT * FROM <tableName> LIMIT 20 into the SQL editor
+ */
+function insertSqlTableQuery(tableName) {
+    const queryEl = document.getElementById('sqlQuery');
+    if (!queryEl) return;
+    queryEl.value = `SELECT * FROM ${tableName} LIMIT 20`;
+    queryEl.focus();
+    showToast('Table Selected', `Generated SELECT query for '${tableName}'`, 'info', 2000);
+}
+
+/**
+ * Filter tables in the SQL sidebar
+ */
+function filterSqlTables() {
+    const filter = (document.getElementById('sqlTableSearch')?.value || '').toLowerCase().trim();
+    const items = document.querySelectorAll('#sqlTableList .sql-table-item');
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(filter) ? 'flex' : 'none';
+    });
+}
+
+/**
+ * Export SQL results as RFC 4180 CSV
+ */
+function exportSqlResultsCsv() {
+    const res = window.__lastSqlResult;
+    if (!res || !res.rows || res.rows.length === 0) {
+        showToast('Export CSV', 'No SQL results to export', 'warning', 2500);
+        return;
+    }
+
+    const cols = res.cols && res.cols.length > 0 ? res.cols : Object.keys(res.rows[0]);
+    const headerLine = cols.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',');
+    
+    const rowLines = res.rows.map(row => {
+        return cols.map(c => {
+            const v = row[c];
+            if (v == null) return '""';
+            return `"${String(v).replace(/"/g, '""')}"`;
+        }).join(',');
+    });
+
+    const csvContent = [headerLine, ...rowLines].join('\r\n');
+    const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    _triggerDownload(csvContent, `sql_results_${ts}.csv`, 'text/csv;charset=utf-8;');
+    showToast('Export Successful', `Exported ${res.rows.length} rows to CSV`, 'success', 2500);
+}
+
+/**
+ * Export SQL results as JSON file
+ */
+function exportSqlResultsJson() {
+    const res = window.__lastSqlResult;
+    if (!res || !res.rows || res.rows.length === 0) {
+        showToast('Export JSON', 'No SQL results to export', 'warning', 2500);
+        return;
+    }
+    const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    exportAsJson(res.rows, `sql_results_${ts}.json`);
+    showToast('Export Successful', `Exported ${res.rows.length} rows to JSON`, 'success', 2500);
+}
+
+/**
+ * Copy SQL results as JSON to clipboard
+ */
+function copySqlResultsJson() {
+    const res = window.__lastSqlResult;
+    if (!res || !res.rows || res.rows.length === 0) {
+        showToast('Copy JSON', 'No SQL results to copy', 'warning', 2500);
+        return;
+    }
+    copyToClipboard(JSON.stringify(res.rows, null, 2));
+}
+
+// ============================================================================
+// LIVE JSON VALIDATION & FORMATTING
+// ============================================================================
+
+function validateDocJsonInput() {
+    const el = document.getElementById('docJson');
+    const badge = document.getElementById('docJsonStatus');
+    if (!el || !badge) return;
+
+    const val = el.value.trim();
+    if (!val) {
+        badge.style.display = 'none';
+        el.style.borderColor = '';
+        el.style.boxShadow = '';
+        return;
+    }
+
+    try {
+        JSON.parse(val);
+        badge.style.display = 'inline-flex';
+        badge.className = 'json-status-badge json-status-valid';
+        badge.textContent = '✓ Valid JSON';
+        el.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+        el.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.15)';
+    } catch (err) {
+        badge.style.display = 'inline-flex';
+        badge.className = 'json-status-badge json-status-invalid';
+        badge.textContent = '⚠ Invalid JSON';
+        el.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+        el.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.15)';
+    }
+}
+
+function formatDocJson() {
+    formatJsonTextarea('docJson');
+    validateDocJsonInput();
+}
+
+// ============================================================================
+// LOGS STREAM, SEVERITY PILLS & EXPORT
+// ============================================================================
+
+window.__logsPaused = false;
+
+function setLogLevelFilter(level) {
+    document.querySelectorAll('#logFilterPills .log-pill').forEach(p => p.classList.remove('active'));
+    const pill = document.querySelector(`#logFilterPills .log-pill-${level}`);
+    if (pill) pill.classList.add('active');
+    const select = document.getElementById('logFilter');
+    if (select) {
+        select.value = level === 'all' ? '' : level;
+        if (typeof renderLogs === 'function') renderLogs();
+    }
+}
+
+function toggleLogPause() {
+    window.__logsPaused = !window.__logsPaused;
+    const btnText = document.getElementById('pauseLogText');
+    if (btnText) btnText.textContent = window.__logsPaused ? 'Resume' : 'Pause';
+    const btn = document.getElementById('pauseLogBtn');
+    if (btn) btn.classList.toggle('btn-warning', window.__logsPaused);
+    showToast('Logs Stream', window.__logsPaused ? 'Live logging paused' : 'Live logging resumed', 'info', 2000);
+}
+
+function exportLogsToFile() {
+    if (typeof logs === 'undefined' || !logs || logs.length === 0) {
+        showToast('Export Logs', 'No log entries to export', 'info', 2000);
+        return;
+    }
+    const ts = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    exportAsJson(logs, `junify_logs_${ts}.json`);
+    showToast('Logs Exported', `${logs.length} log entries downloaded`, 'success', 2500);
+}

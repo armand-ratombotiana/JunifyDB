@@ -20,15 +20,25 @@ import org.junify.db.nosql.kv.ListBucket;
 import org.junify.db.nosql.kv.SetBucket;
 
 
+import com.sun.net.httpserver.Headers;
+import com.sun.net.httpserver.HttpContext;
+import com.sun.net.httpserver.HttpPrincipal;
+import org.junify.db.config.ConsoleConfig;
+import org.junify.db.config.SecurityConfig;
+import org.junify.db.config.ConfigurationResolver;
+import org.junify.db.security.CsrfTokenManager;
 import java.io.IOException;
 import javax.net.ssl.SSLContext;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -47,6 +57,7 @@ public class JunifyDBServer {
     private String sslKeystorePath = null;
     private String sslKeystorePassword = null;
     private HttpServer server;
+    private java.util.concurrent.ExecutorService executorService;
     private long startTime;
     /**
      * API key for request authentication.
@@ -85,8 +96,50 @@ public class JunifyDBServer {
     public record AuditEvent(long timestamp, String operation, String resource, String documentId,
                              String status, String clientIp, String details) {}
 
+    private ConsoleConfig consoleConfig = ConsoleConfig.disabled();
+    private SecurityConfig securityConfig = SecurityConfig.disabled();
+    private String consoleUrl = null;
+    private String adminUsername = SecurityConfig.DEFAULT_ADMIN_USERNAME;
+    private String adminPassword = null;
+    private String allowedOrigins = "*";
+
     public JunifyDBServer(JunifyDB db) {
         this.db = db;
+    }
+
+    public void applySecurityConfig(SecurityConfig securityConfig) {
+        if (securityConfig == null) return;
+        this.securityConfig = ConfigurationResolver.resolveSecurityConfig(securityConfig);
+        this.authEnabled = this.securityConfig.authEnabled();
+        this.apiKey = this.securityConfig.apiKey();
+        this.adminUsername = this.securityConfig.adminUsername() != null ? this.securityConfig.adminUsername() : SecurityConfig.DEFAULT_ADMIN_USERNAME;
+        this.adminPassword = this.securityConfig.adminPassword();
+        this.corsEnabled = this.securityConfig.corsEnabled();
+        this.allowedOrigins = this.securityConfig.allowedOrigins() != null ? this.securityConfig.allowedOrigins() : "*";
+        this.sessionManager = new SecureSessionManager(this.securityConfig.sessionTtlMs());
+        if (this.securityConfig.rateLimitRequestsPerMinute() > 0) {
+            this.rateLimit = this.securityConfig.rateLimitRequestsPerMinute();
+        }
+        if (this.securityConfig.sslPort() > 0 && this.securityConfig.sslKeystorePath() != null) {
+            configureSsl(this.securityConfig.sslPort(), this.securityConfig.sslKeystorePath(), this.securityConfig.sslKeystorePassword());
+        }
+    }
+
+    public SecurityConfig getSecurityConfig() {
+        return securityConfig;
+    }
+
+    public ConsoleConfig getConsoleConfig() {
+        return consoleConfig;
+    }
+
+    public String getConsoleUrl() {
+        if (consoleUrl != null) return consoleUrl;
+        if (server != null) {
+            int p = server.getAddress().getPort();
+            return "http://localhost:" + p + "/";
+        }
+        return null;
     }
 
     public void setApiKey(String apiKey) {
@@ -179,7 +232,85 @@ public class JunifyDBServer {
     }
 
 
-    private final SecureSessionManager sessionManager = new SecureSessionManager();
+    private SecureSessionManager sessionManager = new SecureSessionManager();
+    private final CsrfTokenManager csrfTokenManager = new CsrfTokenManager();
+
+    private static class FailedLoginTracker {
+        final AtomicInteger count = new AtomicInteger(0);
+        volatile long lockoutUntil = 0L;
+    }
+    private final ConcurrentHashMap<String, FailedLoginTracker> failedLogins = new ConcurrentHashMap<>();
+
+    private boolean isIpLockedOut(String clientIp) {
+        if (securityConfig == null || !securityConfig.bruteForceProtectionEnabled()) {
+            return false;
+        }
+        FailedLoginTracker tracker = failedLogins.get(clientIp);
+        if (tracker == null) return false;
+        long now = System.currentTimeMillis();
+        if (now < tracker.lockoutUntil) {
+            return true;
+        }
+        if (tracker.lockoutUntil > 0 && now >= tracker.lockoutUntil) {
+            tracker.count.set(0);
+            tracker.lockoutUntil = 0L;
+        }
+        return false;
+    }
+
+    private void recordFailedLogin(String clientIp) {
+        if (securityConfig == null || !securityConfig.bruteForceProtectionEnabled()) return;
+        FailedLoginTracker tracker = failedLogins.computeIfAbsent(clientIp, k -> new FailedLoginTracker());
+        int attempts = tracker.count.incrementAndGet();
+        if (attempts >= securityConfig.maxFailedLoginAttempts()) {
+            tracker.lockoutUntil = System.currentTimeMillis() + securityConfig.lockoutDurationMs();
+            logger.warn("[JunifyDBServer] IP {} locked out until {} due to {} failed login attempts",
+                    clientIp, tracker.lockoutUntil, attempts);
+        }
+    }
+
+    private void recordSuccessfulLogin(String clientIp) {
+        failedLogins.remove(clientIp);
+    }
+
+    private boolean isCsrfValid(HttpExchange exchange) {
+        if (!authEnabled || securityConfig == null || !securityConfig.csrfEnabled()) {
+            return true;
+        }
+        String method = exchange.getRequestMethod().toUpperCase();
+        if ("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method)) {
+            return true;
+        }
+        // Machine-to-machine API key auth bypasses CSRF
+        var authHeader = exchange.getRequestHeaders().getFirst("X-API-Key");
+        if (apiKey != null && apiKey.equals(authHeader)) {
+            return true;
+        }
+        var bearerHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (bearerHeader != null && bearerHeader.startsWith("Bearer ")) {
+            String token = bearerHeader.substring(7);
+            if (apiKey != null && apiKey.equals(token)) {
+                return true;
+            }
+        }
+        // If authenticated via cookie or bearer session, check CSRF token
+        String sessionId = sessionManager.getSessionIdFromCookie(exchange);
+        if (sessionId == null && bearerHeader != null && bearerHeader.startsWith("Bearer ")) {
+            sessionId = bearerHeader.substring(7);
+        }
+        if (sessionId != null) {
+            String csrfHeader = exchange.getRequestHeaders().getFirst("X-CSRF-Token");
+            if (csrfHeader == null || csrfHeader.isBlank()) {
+                return false;
+            }
+            return csrfTokenManager.validateToken(csrfHeader, sessionId);
+        }
+        return true;
+    }
+
+    private void sendCsrfError(HttpExchange exchange) throws IOException {
+        sendJson(exchange, 403, Map.of("error", "Forbidden", "message", "Invalid or missing CSRF token"));
+    }
 
     private boolean isAuthValid(HttpExchange exchange) {
         if (!authEnabled) return true;
@@ -188,8 +319,15 @@ public class JunifyDBServer {
             return true;
         }
         var bearerHeader = exchange.getRequestHeaders().getFirst("Authorization");
-        if (bearerHeader != null && bearerHeader.startsWith("Bearer ") && apiKey != null && apiKey.equals(bearerHeader.substring(7))) {
-            return true;
+        if (bearerHeader != null && bearerHeader.startsWith("Bearer ")) {
+            String token = bearerHeader.substring(7);
+            if (apiKey != null && apiKey.equals(token)) {
+                return true;
+            }
+            SessionInfo session = sessions.get(token);
+            if (session != null && session.expiresAt() > System.currentTimeMillis()) {
+                return true;
+            }
         }
         String sessionId = sessionManager.getSessionIdFromCookie(exchange);
         if (sessionId != null) {
@@ -206,6 +344,9 @@ public class JunifyDBServer {
     }
 
     private boolean isRateLimited(HttpExchange exchange) {
+        if (securityConfig != null && !securityConfig.rateLimitEnabled()) {
+            return false;
+        }
         var clientIp = getClientIp(exchange);
         var now = System.currentTimeMillis();
         var entry = rateLimitMap.computeIfAbsent(clientIp, k -> new RateLimitEntry());
@@ -215,7 +356,10 @@ public class JunifyDBServer {
             entry.count.set(0);
         }
         
-        return entry.count.incrementAndGet() > rateLimit;
+        int limit = (securityConfig != null && securityConfig.rateLimitRequestsPerMinute() > 0)
+                ? securityConfig.rateLimitRequestsPerMinute()
+                : rateLimit;
+        return entry.count.incrementAndGet() > limit;
     }
 
     private void sendRateLimitError(HttpExchange exchange) throws IOException {
@@ -230,22 +374,48 @@ public class JunifyDBServer {
 
     private void addCorsHeaders(HttpExchange exchange) {
         if (corsEnabled) {
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", allowedOrigins != null ? allowedOrigins : "*");
             exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization, Cookie, X-CSRF-Token");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
+        }
+    }
+
+    private void addSecurityHeaders(HttpExchange exchange) {
+        if (securityConfig != null && securityConfig.securityHeadersEnabled()) {
+            var headers = exchange.getResponseHeaders();
+            headers.set("X-Content-Type-Options", "nosniff");
+            headers.set("X-Frame-Options", "DENY");
+            headers.set("X-XSS-Protection", "1; mode=block");
+            headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+            headers.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'");
+            if (sslPort > 0) {
+                headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+            }
         }
     }
 
     public void start(int port) throws IOException {
-        server = HttpServer.create(new InetSocketAddress(port), 0);
+        String host = (consoleConfig != null && consoleConfig.host() != null)
+                ? consoleConfig.host()
+                : ConsoleConfig.DEFAULT_HOST;
+        server = HttpServer.create(new InetSocketAddress(host, port), 0);
         startTime = System.currentTimeMillis();
+        int actualPort = server.getAddress().getPort();
+        String scheme = (consoleConfig != null && consoleConfig.scheme() != null) ? consoleConfig.scheme() : "http";
+        String displayHost = ("0.0.0.0".equals(host) || "127.0.0.1".equals(host)) ? "localhost" : host;
+        String ctx = (consoleConfig != null && consoleConfig.contextPath() != null) ? consoleConfig.contextPath() : "/";
+        if (!ctx.startsWith("/")) ctx = "/" + ctx;
+        if (!ctx.endsWith("/")) ctx = ctx + "/";
+        if (this.consoleUrl == null) {
+            this.consoleUrl = scheme + "://" + displayHost + ":" + actualPort + (ctx.equals("/") ? "/" : ctx);
+        }
 
         // Log security configuration
         if (authEnabled) {
-            logger.info("[JunifyDBServer] Authentication ENABLED with API key");
-            logger.info("[JunifyDBServer] Include header: X-API-Key: <your-key>");
+            logger.info("[JunifyDBServer] Authentication ENABLED (admin: '{}', apiKey: {})",
+                    adminUsername, apiKey != null ? "configured" : "none");
             if (apiKey != null && !apiKey.isEmpty()) {
-                // Truncate key for log — never log the full secret
                 String maskedKey = apiKey.length() > 8 ? apiKey.substring(0, 8) + "..." : "***";
                 logger.info("[JunifyDBServer] API key prefix: {}", maskedKey);
             }
@@ -254,13 +424,45 @@ public class JunifyDBServer {
         }
 
         registerHandlers(server);
-        server.setExecutor(null);
+        server.setExecutor(getOrCreateExecutor());
         server.start();
 
         // Start HTTPS server if SSL is configured
         if (sslPort > 0 && sslKeystorePath != null) {
             startHttpsServer();
         }
+    }
+
+    /**
+     * Start server with intelligent port management:
+     * Validates port range, handles collisions according to configuration,
+     * and binds securely.
+     */
+    public int startIntelligent(ConsoleConfig config) throws IOException {
+        this.consoleConfig = ConfigurationResolver.resolveConsoleConfig(config != null ? config : ConsoleConfig.disabled());
+        String host = consoleConfig.host() != null ? consoleConfig.host() : ConsoleConfig.DEFAULT_HOST;
+
+        PortManager.BindingResult bindingResult = PortManager.bindServer(consoleConfig);
+        this.server = bindingResult.server();
+        this.startTime = System.currentTimeMillis();
+        int boundPort = bindingResult.port();
+
+        registerHandlers(server);
+        server.setExecutor(getOrCreateExecutor());
+        server.start();
+
+        if (sslPort > 0 && sslKeystorePath != null) {
+            startHttpsServer();
+        }
+
+        String scheme = consoleConfig.scheme() != null ? consoleConfig.scheme() : "http";
+        String displayHost = ("0.0.0.0".equals(host) || "127.0.0.1".equals(host)) ? "localhost" : host;
+        String ctx = consoleConfig.contextPath();
+        if (!ctx.startsWith("/")) ctx = "/" + ctx;
+        if (!ctx.endsWith("/")) ctx = ctx + "/";
+        this.consoleUrl = scheme + "://" + displayHost + ":" + boundPort + (ctx.equals("/") ? "/" : ctx);
+        logger.info("[JunifyDBServer] Administration Console available at: {}", this.consoleUrl);
+        return boundPort;
     }
     
     private class CorsPreflightHandler implements HttpHandler {
@@ -307,7 +509,7 @@ public class JunifyDBServer {
             });
 
             registerHandlers(httpsServer);
-            httpsServer.setExecutor(null);
+            httpsServer.setExecutor(getOrCreateExecutor());
             httpsServer.start();
             logger.info("[JunifyDBServer] HTTPS server started on port {}", sslPort);
         } catch (Exception e) {
@@ -316,42 +518,155 @@ public class JunifyDBServer {
     }
 
     /**
+     * Delegating HttpExchange wrapper that strips the configured context-path prefix
+     * from getRequestURI() so all downstream handlers operate seamlessly regardless of
+     * whether the server is mounted on "/" or a sub-path like "/jnosql-admin/".
+     */
+    private static class ContextAwareExchange extends HttpExchange {
+        private final HttpExchange delegate;
+        private final String prefix;
+        private URI adjustedUri;
+
+        public ContextAwareExchange(HttpExchange delegate, String prefix) {
+            this.delegate = delegate;
+            this.prefix = prefix;
+        }
+
+        @Override
+        public URI getRequestURI() {
+            if (adjustedUri == null) {
+                URI orig = delegate.getRequestURI();
+                String path = orig.getPath();
+                if (path != null && path.startsWith(prefix)) {
+                    String newPath = path.substring(prefix.length());
+                    if (!newPath.startsWith("/")) {
+                        newPath = "/" + newPath;
+                    }
+                    try {
+                        adjustedUri = new URI(orig.getScheme(), orig.getUserInfo(), orig.getHost(),
+                                orig.getPort(), newPath, orig.getQuery(), orig.getFragment());
+                    } catch (Exception e) {
+                        adjustedUri = orig;
+                    }
+                } else {
+                    adjustedUri = orig;
+                }
+            }
+            return adjustedUri;
+        }
+
+        @Override public Headers getRequestHeaders() { return delegate.getRequestHeaders(); }
+        @Override public Headers getResponseHeaders() { return delegate.getResponseHeaders(); }
+        @Override public String getRequestMethod() { return delegate.getRequestMethod(); }
+        @Override public HttpContext getHttpContext() { return delegate.getHttpContext(); }
+        @Override public void close() { delegate.close(); }
+        @Override public InputStream getRequestBody() { return delegate.getRequestBody(); }
+        @Override public OutputStream getResponseBody() { return delegate.getResponseBody(); }
+        @Override public void sendResponseHeaders(int rCode, long responseLength) throws IOException {
+            delegate.sendResponseHeaders(rCode, responseLength);
+        }
+        @Override public InetSocketAddress getRemoteAddress() { return delegate.getRemoteAddress(); }
+        @Override public int getResponseCode() { return delegate.getResponseCode(); }
+        @Override public InetSocketAddress getLocalAddress() { return delegate.getLocalAddress(); }
+        @Override public String getProtocol() { return delegate.getProtocol(); }
+        @Override public Object getAttribute(String name) { return delegate.getAttribute(name); }
+        @Override public void setAttribute(String name, Object value) { delegate.setAttribute(name, value); }
+        @Override public void setStreams(InputStream i, OutputStream o) { delegate.setStreams(i, o); }
+        @Override public HttpPrincipal getPrincipal() { return delegate.getPrincipal(); }
+    }
+
+    /**
      * Register all HTTP handler contexts on the given server instance.
      * Used by both the plain HTTP server and the HTTPS server so that
      * handler registrations are never duplicated or out-of-sync.
      */
     private void registerHandlers(HttpServer httpServer) {
-        httpServer.createContext("/", new StaticHandler());
-        httpServer.createContext("/api/collections", new CollectionsHandler());
-        httpServer.createContext("/api/auth/login", new AuthLoginHandler());
-        httpServer.createContext("/api/auth/logout", new AuthLogoutHandler());
-        httpServer.createContext("/api/kv/", new KeyValueHandler());
-        httpServer.createContext("/api/kv/lists/", new ListHandler());
-        httpServer.createContext("/api/kv/sets/", new SetHandler());
-        httpServer.createContext("/api/kv/hashes/", new HashHandler());
-        httpServer.createContext("/api/columns/", new ColumnHandler());
-        httpServer.createContext("/api/health", new HealthHandler());
-        httpServer.createContext("/api/metrics", new MetricsHandler());
-        httpServer.createContext("/api/metrics/stream", new MetricsStreamHandler());
-        httpServer.createContext("/api/stats", new StatsHandler());
-        httpServer.createContext("/api/backup", new BackupHandler());
-        httpServer.createContext("/api/indexes/", new IndexHandler());
-        httpServer.createContext("/api/transactions", new TransactionHandler());
-        httpServer.createContext("/api/schema/", new SchemaHandler());
-        httpServer.createContext("/api/vectors/", new VectorHandler());
-        httpServer.createContext("/api/bulk", new BulkHandler());
-        httpServer.createContext("/api/cdc", new CDCHandler());
-        httpServer.createContext("/api/audit/logs", new AuditLogHandler());
+        String rawCtx = (consoleConfig != null && consoleConfig.contextPath() != null) ? consoleConfig.contextPath() : "/";
+        if (!rawCtx.startsWith("/")) rawCtx = "/" + rawCtx;
+        while (rawCtx.length() > 1 && rawCtx.endsWith("/")) {
+            rawCtx = rawCtx.substring(0, rawCtx.length() - 1);
+        }
+        final String prefix = rawCtx.equals("/") ? "" : rawCtx;
+
+        if (!prefix.isEmpty()) {
+            // Register UI static handler under prefix and prefix/
+            httpServer.createContext(prefix + "/", wrapHandler(new StaticHandler(), prefix));
+            httpServer.createContext(prefix, wrapHandler(new StaticHandler(), prefix));
+
+            // Root redirect: when contextPath is not root, visiting "/" redirects to "${prefix}/"
+            httpServer.createContext("/", exchange -> {
+                String reqPath = exchange.getRequestURI().getPath();
+                if (reqPath.equals("/") || reqPath.isEmpty()) {
+                    addSecurityHeaders(exchange);
+                    exchange.getResponseHeaders().set("Location", prefix + "/");
+                    exchange.sendResponseHeaders(302, -1);
+                } else {
+                    exchange.sendResponseHeaders(404, -1);
+                }
+            });
+        } else {
+            httpServer.createContext("/", new StaticHandler());
+        }
+
+        registerEndpoint(httpServer, prefix, "/api/collections", new CollectionsHandler());
+        registerEndpoint(httpServer, prefix, "/api/auth/login", new AuthLoginHandler());
+        registerEndpoint(httpServer, prefix, "/api/auth/logout", new AuthLogoutHandler());
+        registerEndpoint(httpServer, prefix, "/api/kv", new KeyValueHandler());
+        registerEndpoint(httpServer, prefix, "/api/kv/lists", new ListHandler());
+        registerEndpoint(httpServer, prefix, "/api/kv/sets", new SetHandler());
+        registerEndpoint(httpServer, prefix, "/api/kv/hashes", new HashHandler());
+        registerEndpoint(httpServer, prefix, "/api/columns", new ColumnHandler());
+        registerEndpoint(httpServer, prefix, "/api/health", new HealthHandler());
+        registerEndpoint(httpServer, prefix, "/api/metrics", new MetricsHandler());
+        registerEndpoint(httpServer, prefix, "/api/metrics/stream", new MetricsStreamHandler());
+        registerEndpoint(httpServer, prefix, "/api/stats", new StatsHandler());
+        registerEndpoint(httpServer, prefix, "/api/backup", new BackupHandler());
+        registerEndpoint(httpServer, prefix, "/api/indexes", new IndexHandler());
+        registerEndpoint(httpServer, prefix, "/api/transactions", new TransactionHandler());
+        registerEndpoint(httpServer, prefix, "/api/schema", new SchemaHandler());
+        registerEndpoint(httpServer, prefix, "/api/vectors", new VectorHandler());
+        registerEndpoint(httpServer, prefix, "/api/bulk", new BulkHandler());
+        registerEndpoint(httpServer, prefix, "/api/cdc", new CDCHandler());
+        registerEndpoint(httpServer, prefix, "/api/audit/logs", new AuditLogHandler());
+        registerEndpoint(httpServer, prefix, "/api/sql", new SqlHandler());
         if (corsEnabled) {
-            httpServer.createContext("/api/cors", new CorsPreflightHandler());
+            registerEndpoint(httpServer, prefix, "/api/cors", new CorsPreflightHandler());
         }
     }
-public void stop() {
+
+    private void registerEndpoint(HttpServer server, String prefix, String path, HttpHandler handler) {
+        if (!prefix.isEmpty()) {
+            server.createContext(prefix + path, wrapHandler(handler, prefix));
+        }
+        if (prefix.isEmpty() || !"/".equals(path)) {
+            server.createContext(path, handler);
+        }
+    }
+
+    private HttpHandler wrapHandler(HttpHandler handler, String prefix) {
+        if (prefix.isEmpty()) return handler;
+        return exchange -> handler.handle(new ContextAwareExchange(exchange, prefix));
+    }
+    private synchronized java.util.concurrent.ExecutorService getOrCreateExecutor() {
+        if (executorService == null || executorService.isShutdown()) {
+            executorService = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "junifydb-http-worker");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+        return executorService;
+    }
+
+    public void stop() {
         if (server != null) {
             server.stop(0);
         }
         if (httpsServer != null) {
             httpsServer.stop(0);
+        }
+        if (executorService != null) {
+            executorService.shutdownNow();
         }
     }
 
@@ -397,19 +712,21 @@ public void stop() {
                 }
 
                 var result = filtered.limit(limit).toList();
+                var eventMaps = new java.util.ArrayList<Map<String, Object>>();
+                for (var e : result) {
+                    var m = new java.util.LinkedHashMap<String, Object>();
+                    m.put("timestamp", e.timestamp());
+                    m.put("operation", e.operation() != null ? e.operation() : "");
+                    m.put("resource", e.resource() != null ? e.resource() : "");
+                    m.put("documentId", e.documentId() != null ? e.documentId() : "");
+                    m.put("status", e.status() != null ? e.status() : "");
+                    m.put("clientIp", e.clientIp() != null ? e.clientIp() : "");
+                    m.put("details", e.details() != null ? e.details() : "");
+                    eventMaps.add(m);
+                }
                 sendJson(exchange, 200, java.util.Map.of(
                     "count", result.size(),
-                    "events", result.stream()
-                        .map(e -> java.util.Map.of(
-                            "timestamp", e.timestamp(),
-                            "operation", e.operation(),
-                            "resource", e.resource(),
-                            "documentId", e.documentId(),
-                            "status", e.status(),
-                            "clientIp", e.clientIp(),
-                            "details", e.details()
-                        ))
-                        .toList()
+                    "events", eventMaps
                 ));
             } else {
                 sendJson(exchange, 405, java.util.Map.of("error", "Method not allowed"));
@@ -421,6 +738,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
+            addSecurityHeaders(exchange);
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(204, -1);
                 return;
@@ -430,29 +748,66 @@ public void stop() {
                 return;
             }
             try {
+                String clientIp = getClientIp(exchange);
+                if (isIpLockedOut(clientIp)) {
+                    logAuditEvent("LOGIN", "auth", null, "LOCKED_OUT", clientIp, "Client IP temporarily locked out");
+                    sendJson(exchange, 429, Map.of(
+                            "error", "Too Many Requests",
+                            "message", "Client IP is temporarily locked out due to excessive failed attempts. Please try again later."
+                    ));
+                    return;
+                }
+
                 var body = readBody(exchange);
                 @SuppressWarnings("unchecked")
                 var req = (body == null || body.trim().isEmpty())
                         ? Map.of()
                         : JsonSerde.fromJson(body, Map.class);
-                String user = req.get("username") != null ? req.get("username").toString() : "admin";
+                String user = req.get("username") != null ? req.get("username").toString() : null;
+                String pass = req.get("password") != null ? req.get("password").toString() : null;
                 String key = req.get("apiKey") != null ? req.get("apiKey").toString() : null;
 
-                if (authEnabled && apiKey != null) {
-                    if (key != null && !key.equals(apiKey)) {
-                        sendJson(exchange, 401, Map.of("error", "Unauthorized", "message", "Invalid API key"));
+                if (authEnabled) {
+                    boolean authenticated = false;
+                    // Check API Key
+                    if (apiKey != null && !apiKey.isEmpty()) {
+                        if (apiKey.equals(key) || apiKey.equals(pass)) {
+                            authenticated = true;
+                            if (user == null) user = "api-user";
+                        }
+                    }
+                    // Check Username & Password
+                    if (!authenticated && adminPassword != null && !adminPassword.isEmpty()) {
+                        String expectedUser = adminUsername != null ? adminUsername : SecurityConfig.DEFAULT_ADMIN_USERNAME;
+                        if (expectedUser.equals(user) && adminPassword.equals(pass)) {
+                            authenticated = true;
+                        }
+                    }
+                    if (!authenticated) {
+                        recordFailedLogin(clientIp);
+                        logAuditEvent("LOGIN", "auth", null, "FAILED", clientIp, "Invalid credentials or API key");
+                        sendJson(exchange, 401, Map.of("error", "Unauthorized", "message", "Invalid credentials or API key"));
                         return;
                     }
                 }
 
+                recordSuccessfulLogin(clientIp);
+                if (user == null) user = adminUsername != null ? adminUsername : "admin";
                 String sessionId = sessionManager.generateSessionId();
-                sessions.put(sessionId, new SessionInfo(user, System.currentTimeMillis() + SESSION_TTL_MS));
+                long ttl = (securityConfig != null && securityConfig.sessionTtlMs() > 0)
+                        ? securityConfig.sessionTtlMs()
+                        : SESSION_TTL_MS;
+                sessions.put(sessionId, new SessionInfo(user, System.currentTimeMillis() + ttl));
                 sessionManager.setSessionCookie(exchange, sessionId, sslPort > 0);
+                String csrfToken = csrfTokenManager.generateToken(sessionId);
+                exchange.getResponseHeaders().set("X-CSRF-Token", csrfToken);
+                logAuditEvent("LOGIN", "auth", null, "SUCCESS", clientIp, "User: " + user);
 
                 sendJson(exchange, 200, Map.of(
                     "status", "authenticated",
                     "session", sessionId,
                     "token", sessionId,
+                    "csrfToken", csrfToken,
                     "username", user
                 ));
             } catch (Exception e) {
@@ -465,6 +820,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             addCorsHeaders(exchange);
+            addSecurityHeaders(exchange);
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(204, -1);
                 return;
@@ -472,6 +828,7 @@ public void stop() {
             String sessionId = sessionManager.getSessionIdFromCookie(exchange);
             if (sessionId != null) {
                 sessions.remove(sessionId);
+                csrfTokenManager.invalidateAllSessionTokens(sessionId);
             }
             sessionManager.clearSessionCookie(exchange);
             sendJson(exchange, 200, Map.of("status", "logged_out"));
@@ -481,6 +838,8 @@ public void stop() {
     private class StaticHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            addSecurityHeaders(exchange);
+            addCorsHeaders(exchange);
             var path = exchange.getRequestURI().getPath();
             if (path.equals("/")) {
                 path = "/index.html";
@@ -505,6 +864,7 @@ public void stop() {
             if (path.endsWith(".css")) return "text/css";
             if (path.endsWith(".js")) return "application/javascript";
             if (path.endsWith(".json")) return "application/json";
+            if (path.endsWith(".svg")) return "image/svg+xml";
             if (path.endsWith(".png")) return "image/png";
             if (path.endsWith(".ico")) return "image/x-icon";
             return "text/plain";
@@ -545,6 +905,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -685,7 +1046,14 @@ public void stop() {
 
                             var results = collection.find(query);
                             sendJson(exchange, 200, results.stream()
-                                .map(Document::getFields)
+                                .map(doc -> {
+                                    var map = new java.util.LinkedHashMap<String, Object>();
+                                    if (doc.getId() != null) {
+                                        map.put("id", doc.getId());
+                                    }
+                                    map.putAll(doc.getFields());
+                                    return map;
+                                })
                                 .collect(java.util.stream.Collectors.toList()));
                         } catch (Exception e) {
                             System.err.println("[CollectionsHandler] Query error: " + e.getMessage());
@@ -768,6 +1136,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             if (parts.length < 4) {
@@ -804,6 +1173,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -961,6 +1331,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -1141,6 +1512,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -1341,6 +1713,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             var query = exchange.getRequestURI().getQuery();
@@ -1549,13 +1922,16 @@ public void stop() {
                 } else if ("PUT".equals(exchange.getRequestMethod()) || "POST".equals(exchange.getRequestMethod())) {
                     var body = readBody(exchange);
                     var data = JsonSerde.fromJson(body, Map.class);
-                    for (Object o : data.entrySet()) {
+                    Map<?, ?> colData = data;
+                    if (data.containsKey("columns") && data.get("columns") instanceof Map<?, ?> inner) {
+                        colData = inner;
+                    }
+                    for (Object o : colData.entrySet()) {
                         var entry = (java.util.Map.Entry<?, ?>) o;
                         var value = entry.getValue();
                         Integer ttl = null;
                         // Support nested TTL format: {"column": {"value": "x", "ttlSeconds": 60}}
-                        if (value instanceof Map) {
-                            var valueMap = (Map<?, ?>) value;
+                        if (value instanceof Map<?, ?> valueMap && valueMap.containsKey("value")) {
                             value = valueMap.get("value");
                             if (valueMap.containsKey("ttlSeconds")) {
                                 ttl = ((Number) valueMap.get("ttlSeconds")).intValue();
@@ -1605,6 +1981,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -1681,6 +2058,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             if (parts.length < 4 || parts[3].isEmpty()) {
@@ -1719,6 +2097,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             if ("POST".equals(exchange.getRequestMethod())) {
                 var body = readBody(exchange);
                 var data = JsonSerde.fromJson(body, Map.class);
@@ -1745,117 +2124,137 @@ public void stop() {
     private class SchemaHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
-            var path = exchange.getRequestURI().getPath();
-            var parts = path.split("/");
-            
-            // /api/schema/ with no collection - return list of all registered schemas
-            if (parts.length < 4 || parts[3].isEmpty()) {
-                if ("GET".equals(exchange.getRequestMethod())) {
-                    sendJson(exchange, 200, Map.of("schemas", schemaValidator.getSchemaNames()));
-                } else {
-                    sendJson(exchange, 405, Map.of("error", "Method not allowed"));
-                }
-                return;
-            }
-            
-            var collectionName = parts[3];
-
-            if ("GET".equals(exchange.getRequestMethod())) {
-                if (schemaValidator.hasSchema(collectionName)) {
-                    var schema = schemaValidator.getSchema(collectionName);
-                    var fieldsList = new java.util.ArrayList<Map<String, Object>>();
-                    for (Object f : schema.getFields()) {
-                        try {
-                            var nameF = f.getClass().getDeclaredField("name");
-                            nameF.setAccessible(true);
-                            var typeF = f.getClass().getDeclaredField("type");
-                            typeF.setAccessible(true);
-                            var reqF  = f.getClass().getDeclaredField("required");
-                            reqF.setAccessible(true);
-                            
-                            fieldsList.add(Map.of(
-                                "name", nameF.get(f),
-                                "type", ((Class<?>) typeF.get(f)).getSimpleName(),
-                                "required", reqF.get(f)
-                            ));
-                        } catch (Exception e) {
-                            logger.error("Failed to parse schema field via reflection", e);
-                        }
+            try {
+                if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+                if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
+                var path = exchange.getRequestURI().getPath();
+                var parts = path.split("/");
+                
+                // /api/schema with no collection - return list of all registered schemas
+                if (parts.length < 4 || parts[3].isEmpty()) {
+                    if ("GET".equals(exchange.getRequestMethod())) {
+                        sendJson(exchange, 200, Map.of("schemas", schemaValidator.getSchemaNames()));
+                    } else {
+                        sendJson(exchange, 405, Map.of("error", "Method not allowed"));
                     }
-                    sendJson(exchange, 200, Map.of(
-                        "collectionName", schema.getCollectionName(),
-                        "strict", schema.isStrict(),
-                        "fields", fieldsList
-                    ));
-                } else {
-                    sendJson(exchange, 404, Map.of("error", "No schema found for collection: " + collectionName));
+                    return;
                 }
-            } else if ("POST".equals(exchange.getRequestMethod())) {
-                try {
-                    var body = readBody(exchange);
-                    var data = JsonSerde.fromJson(body, Map.class);
-                    var schema = org.junify.db.core.schema.SchemaValidator.builder(collectionName);
-                    
-                    if (data.containsKey("fields") && data.get("fields") instanceof java.util.List) {
-                        var fieldsList = (java.util.List<?>) data.get("fields");
-                        for (Object f : fieldsList) {
-                            if (f instanceof Map) {
-                                var fMap = (Map<?, ?>) f;
-                                String name = (String) fMap.get("name");
-                                String typeStr = (String) fMap.get("type");
-                                boolean required = Boolean.TRUE.equals(fMap.get("required"));
+                
+                var collectionName = parts[3];
+
+                if ("GET".equals(exchange.getRequestMethod())) {
+                    if (schemaValidator.hasSchema(collectionName)) {
+                        var schema = schemaValidator.getSchema(collectionName);
+                        var fieldsList = new java.util.ArrayList<Map<String, Object>>();
+                        for (Object f : schema.getFields()) {
+                            try {
+                                var nameF = f.getClass().getDeclaredField("name");
+                                nameF.setAccessible(true);
+                                var typeF = f.getClass().getDeclaredField("type");
+                                typeF.setAccessible(true);
+                                var reqF  = f.getClass().getDeclaredField("required");
+                                reqF.setAccessible(true);
                                 
-                                Class<?> type = String.class; // default
-                                if ("Integer".equalsIgnoreCase(typeStr) || "int".equalsIgnoreCase(typeStr)) {
-                                    type = Integer.class;
-                                } else if ("Long".equalsIgnoreCase(typeStr)) {
-                                    type = Long.class;
-                                } else if ("Double".equalsIgnoreCase(typeStr) || "float".equalsIgnoreCase(typeStr) || "number".equalsIgnoreCase(typeStr)) {
-                                    type = Double.class;
-                                } else if ("Boolean".equalsIgnoreCase(typeStr) || "bool".equalsIgnoreCase(typeStr)) {
-                                    type = Boolean.class;
-                                } else if ("Map".equalsIgnoreCase(typeStr) || "object".equalsIgnoreCase(typeStr)) {
-                                    type = Map.class;
-                                } else if ("List".equalsIgnoreCase(typeStr) || "array".equalsIgnoreCase(typeStr)) {
-                                    type = java.util.List.class;
+                                fieldsList.add(Map.of(
+                                    "name", nameF.get(f),
+                                    "type", ((Class<?>) typeF.get(f)).getSimpleName(),
+                                    "required", reqF.get(f)
+                                ));
+                            } catch (Exception e) {
+                                logger.error("Failed to parse schema field via reflection", e);
+                            }
+                        }
+                        sendJson(exchange, 200, Map.of(
+                            "collectionName", schema.getCollectionName(),
+                            "strict", schema.isStrict(),
+                            "fields", fieldsList
+                        ));
+                    } else {
+                        sendJson(exchange, 404, Map.of("error", "No schema found for collection: " + collectionName));
+                    }
+                } else if ("POST".equals(exchange.getRequestMethod())) {
+                    try {
+                        var body = readBody(exchange);
+                        var data = JsonSerde.fromJson(body, Map.class);
+                        var schema = org.junify.db.core.schema.SchemaValidator.builder(collectionName);
+                        
+                        if (data.containsKey("fields")) {
+                            Object fieldsObj = data.get("fields");
+                            if (fieldsObj instanceof java.util.List<?> fieldsList) {
+                                for (Object f : fieldsList) {
+                                    if (f instanceof Map<?, ?> fMap) {
+                                        String name = (String) fMap.get("name");
+                                        String typeStr = (String) fMap.get("type");
+                                        boolean required = Boolean.TRUE.equals(fMap.get("required"));
+                                        Class<?> type = parseFieldType(typeStr);
+                                        if (name != null) {
+                                            schema.field(name, type, required);
+                                        }
+                                    }
                                 }
-                                
-                                if (name != null) {
+                            } else if (fieldsObj instanceof Map<?, ?> fieldsMap) {
+                                for (var entry : fieldsMap.entrySet()) {
+                                    String name = entry.getKey().toString();
+                                    Object val = entry.getValue();
+                                    String typeStr = "String";
+                                    boolean required = false;
+                                    if (val instanceof Map<?, ?> valMap) {
+                                        typeStr = valMap.containsKey("type") && valMap.get("type") != null ? valMap.get("type").toString() : "String";
+                                        required = Boolean.TRUE.equals(valMap.get("required"));
+                                    } else if (val instanceof String s) {
+                                        typeStr = s;
+                                    }
+                                    Class<?> type = parseFieldType(typeStr);
                                     schema.field(name, type, required);
                                 }
                             }
                         }
-                    }
-                    
-                    if (Boolean.TRUE.equals(data.get("strict"))) {
-                        try {
-                            var strictField = schema.getClass().getDeclaredField("strict");
-                            strictField.setAccessible(true);
-                            strictField.set(schema, true);
-                        } catch (Exception e) {
-                            logger.error("Failed to set strict mode on schema via reflection", e);
+                        
+                        if (Boolean.TRUE.equals(data.get("strict"))) {
+                            try {
+                                var strictField = schema.getClass().getDeclaredField("strict");
+                                strictField.setAccessible(true);
+                                strictField.set(schema, true);
+                            } catch (Exception e) {
+                                logger.error("Failed to set strict mode on schema via reflection", e);
+                            }
                         }
+                        
+                        schemaValidator.registerSchema(collectionName, schema);
+                        sendJson(exchange, 201, Map.of(
+                            "status", "schema registered",
+                            "collection", collectionName
+                        ));
+                    } catch (Exception e) {
+                        logger.error("Failed to register schema", e);
+                        sendJson(exchange, 500, Map.of("error", "Schema registration failed", "message", e.getMessage()));
                     }
-                    
-                    schemaValidator.registerSchema(collectionName, schema);
-                    sendJson(exchange, 201, Map.of(
-                        "status", "schema registered",
+                } else if ("DELETE".equals(exchange.getRequestMethod())) {
+                    schemaValidator.dropSchema(collectionName);
+                    sendJson(exchange, 200, Map.of(
+                        "status", "schema dropped",
                         "collection", collectionName
                     ));
-                } catch (Exception e) {
-                    logger.error("Failed to register schema", e);
-                    sendJson(exchange, 500, Map.of("error", "Schema registration failed", "message", e.getMessage()));
+                } else {
+                    sendJson(exchange, 405, Map.of("error", "Method not allowed"));
                 }
-            } else if ("DELETE".equals(exchange.getRequestMethod())) {
-                schemaValidator.dropSchema(collectionName);
-                sendJson(exchange, 200, Map.of(
-                    "status", "schema dropped",
-                    "collection", collectionName
-                ));
-            } else {
-                sendJson(exchange, 405, Map.of("error", "Method not allowed"));
+            } catch (Throwable t) {
+                logger.error("Uncaught error in SchemaHandler", t);
+                try {
+                    sendJson(exchange, 500, Map.of("error", "Server error", "message", t.getMessage()));
+                } catch (Exception ignored) {}
             }
+        }
+
+        private Class<?> parseFieldType(String typeStr) {
+            if (typeStr == null) return String.class;
+            if ("Integer".equalsIgnoreCase(typeStr) || "int".equalsIgnoreCase(typeStr)) return Integer.class;
+            if ("Long".equalsIgnoreCase(typeStr)) return Long.class;
+            if ("Double".equalsIgnoreCase(typeStr) || "float".equalsIgnoreCase(typeStr) || "number".equalsIgnoreCase(typeStr)) return Double.class;
+            if ("Boolean".equalsIgnoreCase(typeStr) || "bool".equalsIgnoreCase(typeStr)) return Boolean.class;
+            if ("Map".equalsIgnoreCase(typeStr) || "object".equalsIgnoreCase(typeStr)) return Map.class;
+            if ("List".equalsIgnoreCase(typeStr) || "array".equalsIgnoreCase(typeStr)) return java.util.List.class;
+            return String.class;
         }
     }
 
@@ -1867,6 +2266,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             if (parts.length < 5) {
@@ -1929,6 +2329,7 @@ public void stop() {
     }
 
     private void sendJson(HttpExchange exchange, int status, Object body) throws IOException {
+        addSecurityHeaders(exchange);
         // Handle 204 No Content separately
         if (status == 204) {
             addCorsHeaders(exchange);
@@ -1998,9 +2399,11 @@ public void stop() {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;
+                    } catch (IOException e) {
+                        break;
                     }
                 }
-            }
+            } catch (IOException ignored) {}
         }
     }
 
@@ -2050,6 +2453,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             if (parts.length < 4) {
@@ -2105,6 +2509,7 @@ public void stop() {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
             var path = exchange.getRequestURI().getPath();
             var parts = path.split("/");
             
@@ -2171,6 +2576,59 @@ public void stop() {
             }
             
             sendJson(exchange, 400, Map.of("error", "Usage: GET /api/cdc, POST/DELETE /api/cdc/connectors/{name}, GET /api/cdc/events"));
+        }
+    }
+
+    private class SqlHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsHeaders(exchange);
+            addSecurityHeaders(exchange);
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            if (!isAuthValid(exchange)) { sendAuthError(exchange); return; }
+            if (!isCsrfValid(exchange)) { sendCsrfError(exchange); return; }
+
+            if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                try {
+                    String body = readBody(exchange);
+                    Map<?, ?> payload = JsonSerde.fromJson(body, Map.class);
+                    String sql = (String) payload.get("query");
+                    if (sql == null || sql.isBlank()) {
+                        sendJson(exchange, 400, Map.of("error", "Query must not be empty"));
+                        return;
+                    }
+
+                    List<?> rawParams = (List<?>) payload.get("params");
+                    Object[] params = rawParams != null ? rawParams.toArray() : new Object[0];
+
+                    long start = System.currentTimeMillis();
+                    var rs = db.sql(sql, params);
+                    long duration = System.currentTimeMillis() - start;
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (var r : rs.getRows()) {
+                        rows.add(r.asMap());
+                    }
+
+                    sendJson(exchange, 200, Map.of(
+                            "columns", rs.getColumnNames(),
+                            "rows", rows,
+                            "rowCount", rs.size(),
+                            "executionTimeMs", duration,
+                            "status", "success"
+                    ));
+                } catch (Exception e) {
+                    sendJson(exchange, 400, Map.of(
+                            "error", "SQL Execution Error",
+                            "message", e.getMessage() != null ? e.getMessage() : e.toString()
+                    ));
+                }
+            } else {
+                sendJson(exchange, 405, Map.of("error", "Method not allowed. Use POST with JSON payload."));
+            }
         }
     }
 }

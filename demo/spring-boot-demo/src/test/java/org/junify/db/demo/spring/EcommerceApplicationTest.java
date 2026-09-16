@@ -4,11 +4,14 @@ import org.junify.db.JunifyDB;
 import org.junify.db.demo.model.Order;
 import org.junify.db.demo.model.OrderItem;
 import org.junify.db.demo.model.Product;
+import org.junify.db.console.http.JunifyDBServer;
 import org.junify.db.spring.boot.JunifyDBTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,17 +27,46 @@ class EcommerceApplicationTest {
     @Autowired
     private JunifyDBTemplate template;
 
+    @Autowired(required = false)
+    private JunifyDBServer consoleServer;
+
     @Autowired
     private ProductService productService;
 
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private EcommerceController ecommerceController;
+
     @Test
     void testContextAndBeansInjected() {
         assertNotNull(db, "JunifyDB bean should be injected");
         assertNotNull(template, "JunifyDBTemplate bean should be injected");
         assertTrue(db.isOpen(), "Database should be open");
+    }
+
+    @Test
+    void testAdminConsoleConfigurationAndAvailability() throws Exception {
+        assertNotNull(consoleServer, "JunifyDBServer bean should be auto-configured and injected");
+        assertEquals(9090, consoleServer.port(), "Admin console should bind to configured port 9090");
+
+        String consoleUrl = db.consoleUrl();
+        assertNotNull(consoleUrl, "Console URL should not be null");
+        assertEquals("http://localhost:9090/junify-console/", consoleUrl, "Console URL should reflect configured context path and port");
+
+        // Verify HTTP endpoint connectivity & security headers
+        URI uri = URI.create(consoleUrl + "api/health");
+        HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+        conn.setRequestMethod("GET");
+        conn.connect();
+
+        // Auth is enabled in application.yml, so anonymous request receives 401
+        int status = conn.getResponseCode();
+        assertEquals(401, status, "Unauthenticated health check should return 401 Unauthorized");
+        assertEquals("nosniff", conn.getHeaderField("X-Content-Type-Options"), "Security headers must be present");
+        assertEquals("DENY", conn.getHeaderField("X-Frame-Options"), "Security headers must be present");
+        conn.disconnect();
     }
 
     @Test
@@ -85,5 +117,25 @@ class EcommerceApplicationTest {
         assertNotNull(reloaded, "Order should be persisted in orders collection");
         assertEquals("cust-001", reloaded.customerId());
         assertEquals(2, reloaded.items().size());
+    }
+
+    @Test
+    void testSqlAnalyticsProductQuery() {
+        productService.save(new Product("sql-p1", "SKU-SQL1", "Pro Keyboard", "Peripherals", 120.0, List.of("electronics"), Map.of()));
+        productService.save(new Product("sql-p2", "SKU-SQL2", "Basic Mouse", "Peripherals", 25.0, List.of("electronics"), Map.of()));
+        productService.save(new Product("sql-p3", "SKU-SQL3", "Wireless Mouse", "Peripherals", 65.0, List.of("electronics"), Map.of()));
+
+        List<Product> matches = productService.findProductsWithSql("Peripherals", 50.0, 150.0);
+        assertEquals(2, matches.size());
+        assertEquals("Wireless Mouse", matches.get(0).name());
+        assertEquals("Pro Keyboard", matches.get(1).name());
+    }
+
+    @Test
+    void testProductsRestControllerWithPriceRange() {
+        @SuppressWarnings("unchecked")
+        List<Product> products = ecommerceController.getAllProducts("Peripherals", 50.0, 150.0);
+        assertNotNull(products);
+        assertTrue(products.size() >= 2);
     }
 }

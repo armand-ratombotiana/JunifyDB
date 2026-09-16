@@ -45,7 +45,7 @@ public class EclipseDocumentTemplate implements DocumentTemplate {
     }
 
     public <T> T update(T entity) {
-        Document doc = EntityMapper.toDocument(entity);
+        Document doc = EntityMapper.toDocument(entity, true);
         collection.update(doc);
         return entity;
     }
@@ -61,6 +61,11 @@ public class EclipseDocumentTemplate implements DocumentTemplate {
         Document doc = collection.findById(id.toString());
         if (doc == null) return Optional.empty();
         return Optional.of(EntityMapper.fromDocument(doc, entityClass));
+    }
+
+    @Override
+    public <T, ID> boolean existsById(Class<T> entityClass, ID id) {
+        return collection.findById(id.toString()) != null;
     }
 
     public <T> List<T> findAll(Class<T> entityClass) {
@@ -90,7 +95,13 @@ public class EclipseDocumentTemplate implements DocumentTemplate {
     }
 
     public <T> long count(Class<T> entityClass) {
-        return collection.count();
+        String entityName = EntityMapper.getCollectionName(entityClass);
+        return collection.findAll().stream()
+                .filter(doc -> {
+                    Object val = doc.getRaw("_entity");
+                    return val == null || entityName.equalsIgnoreCase(val.toString());
+                })
+                .count();
     }
 
     public <T, ID> void deleteById(Class<T> entityClass, ID id) {

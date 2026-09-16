@@ -208,11 +208,13 @@ public class HNSWIndex {
             if (ep == null) continue;
             float[] epVector = vectors.get(ep);
             if (epVector == null) continue;
-            candidates.add(new GraphNode(ep, distance(query, epVector)));
+            GraphNode node = new GraphNode(ep, distance(query, epVector));
+            candidates.add(node);
+            topResults.add(node);
             visited.add(ep);
         }
         
-        double lowerBound = Double.MAX_VALUE;
+        double lowerBound = topResults.isEmpty() ? Double.MAX_VALUE : topResults.peek().distance;
         
         while (!candidates.isEmpty()) {
             GraphNode current = candidates.poll();
@@ -274,11 +276,13 @@ public class HNSWIndex {
             if (ep == null) continue;
             float[] epVector = vectors.get(ep);
             if (epVector == null) continue;
-            candidates.add(new GraphNode(ep, distance(queryVectorForLayer, epVector)));
+            GraphNode node = new GraphNode(ep, distance(queryVectorForLayer, epVector));
+            candidates.add(node);
+            topResults.add(node);
             visited.add(ep);
         }
         
-        double lowerBound = Double.MAX_VALUE;
+        double lowerBound = topResults.isEmpty() ? Double.MAX_VALUE : topResults.peek().distance;
         
         while (!candidates.isEmpty()) {
             GraphNode current = candidates.poll();
@@ -340,11 +344,13 @@ public class HNSWIndex {
             if (ep == null) continue;
             float[] epVector = vectors.get(ep);
             if (epVector == null) continue;
-            candidates.add(new GraphNode(ep, euclideanDistance(query, epVector)));
+            GraphNode node = new GraphNode(ep, euclideanDistance(query, epVector));
+            candidates.add(node);
+            topResults.add(node);
             visited.add(ep);
         }
         
-        double lowerBound = Double.MAX_VALUE;
+        double lowerBound = topResults.isEmpty() ? Double.MAX_VALUE : topResults.peek().distance;
         
         while (!candidates.isEmpty()) {
             GraphNode current = candidates.poll();
