@@ -1,213 +1,1486 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JunifyDB — The Embedded Multi-Model NoSQL Database for the JVM</title>
-<meta name="description" content="JunifyDB is a lightweight embedded multi-model NoSQL database for the JVM: documents, key-value and column-family stores with ACID transactions, full-text and vector search.">
-<link rel="stylesheet" href="styles.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%236366f1'/%3E%3Cpath d='M10 11v10l10-10v10' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JunifyDB ΓÇö The Embedded Dual-Engine Database for Java</title>
+  <meta name="description" content="JunifyDB is the embedded multi-model database for Java. NoSQL + ANSI SQL in a single JAR. No Docker. No daemon. No infrastructure. Spring Boot, Quarkus, Micronaut ready." />
+  <meta name="keywords" content="JunifyDB, embedded database, Java, NoSQL, SQL, Spring Boot, Quarkus, Micronaut, JNoSQL, JPA, H2 alternative" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       DESIGN TOKENS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    :root {
+      --c-bg:          #08090e;
+      --c-bg-card:     #0e1018;
+      --c-bg-glass:    rgba(255,255,255,0.04);
+      --c-border:      rgba(255,255,255,0.08);
+      --c-border-glow: rgba(99,102,241,0.4);
+
+      --c-primary:   #6366f1;
+      --c-primary-2: #818cf8;
+      --c-accent:    #06b6d4;
+      --c-accent-2:  #22d3ee;
+      --c-success:   #10b981;
+      --c-amber:     #f59e0b;
+
+      --gradient-hero: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+      --gradient-card: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(6,182,212,0.06) 100%);
+
+      --text-primary:   #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted:     #475569;
+
+      --font-sans: 'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+      --radius-sm:  6px;
+      --radius-md:  12px;
+      --radius-lg:  20px;
+      --radius-xl:  28px;
+
+      --shadow-glow: 0 0 60px rgba(99,102,241,0.15), 0 0 120px rgba(99,102,241,0.07);
+      --shadow-card: 0 4px 24px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.06) inset;
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       RESET & BASE
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--c-bg);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    ::selection { background: rgba(99,102,241,0.35); color: #fff; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       SCROLLBAR
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--c-bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.4); border-radius: 3px; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       ANIMATED GRID BACKGROUND
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridPulse 8s ease-in-out infinite;
+    }
+    @keyframes gridPulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       NAVIGATION
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(8,9,14,0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--c-border);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none;
+    }
+    .nav-logo-icon {
+      width: 32px; height: 32px;
+      background: var(--gradient-hero);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 16px; color: #fff;
+    }
+    .nav-logo-text {
+      font-size: 18px; font-weight: 700;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .nav-links {
+      display: flex; align-items: center; gap: 2rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-secondary); text-decoration: none; font-size: 14px; font-weight: 500;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text-primary); }
+    .nav-cta {
+      background: var(--gradient-hero);
+      color: #fff !important;
+      padding: 8px 18px; border-radius: var(--radius-sm);
+      font-size: 13px !important; font-weight: 600 !important;
+      transition: opacity 0.2s, transform 0.2s !important;
+    }
+    .nav-cta:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       HERO
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .hero {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 120px 2rem 80px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 100px;
+      padding: 6px 16px; margin-bottom: 2rem;
+      font-size: 13px; font-weight: 600; color: var(--c-primary-2);
+    }
+    .hero-badge-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--c-primary);
+      animation: badgePulse 2s ease-in-out infinite;
+    }
+    @keyframes badgePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.7); }
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 7vw, 5rem);
+      font-weight: 900; line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 span {
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero-sub {
+      font-size: clamp(1.1rem, 2.5vw, 1.35rem);
+      color: var(--text-secondary); max-width: 680px;
+      margin: 0 auto 1.5rem;
+      line-height: 1.7;
+    }
+    .hero-tagline {
+      font-size: 1rem; color: var(--text-muted);
+      font-style: italic; margin-bottom: 2.5rem;
+    }
+    .hero-tagline strong { color: var(--c-primary-2); font-style: normal; }
+    .hero-actions {
+      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+      margin-bottom: 4rem;
+    }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--gradient-hero);
+      color: #fff; text-decoration: none;
+      padding: 14px 28px; border-radius: var(--radius-md);
+      font-size: 15px; font-weight: 700;
+      box-shadow: 0 8px 32px rgba(99,102,241,0.35);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(99,102,241,0.45); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--c-bg-glass);
+      border: 1px solid var(--c-border);
+      color: var(--text-primary); text-decoration: none;
+      padding: 14px 28px; border-radius: var(--radius-md);
+      font-size: 15px; font-weight: 600;
+      backdrop-filter: blur(10px);
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
+    }
+    .btn-secondary:hover {
+      border-color: var(--c-border-glow);
+      background: rgba(99,102,241,0.08);
+      transform: translateY(-2px);
+    }
+
+    /* Hero stats strip */
+    .hero-stats {
+      display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;
+    }
+    .hero-stat {
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .hero-stat-value {
+      font-size: 1.6rem; font-weight: 800;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero-stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .hero-stat-sep { width: 1px; background: var(--c-border); align-self: stretch; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       HERO CODE PANEL
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .hero-code-wrap {
+      width: 100%; max-width: 860px; margin: 3rem auto 0;
+      position: relative;
+    }
+    .code-panel {
+      background: rgba(14,16,24,0.9);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+      box-shadow: var(--shadow-glow), var(--shadow-card);
+    }
+    .code-panel-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--c-border);
+      background: rgba(255,255,255,0.02);
+    }
+    .code-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .code-dot-r { background: #ff5f56; }
+    .code-dot-y { background: #ffbd2e; }
+    .code-dot-g { background: #27c93f; }
+    .code-panel-title { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-left: auto; }
+    .code-body {
+      padding: 1.5rem 2rem;
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 1.9;
+      overflow-x: auto;
+    }
+    .kw  { color: #c792ea; }
+    .fn  { color: #82aaff; }
+    .str { color: #c3e88d; }
+    .cmt { color: #546e7a; font-style: italic; }
+    .op  { color: #89ddff; }
+    .cls { color: #ffcb6b; }
+    .num { color: #f78c6c; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       SECTION WRAPPERS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    section {
+      position: relative; z-index: 1;
+      padding: 100px 2rem;
+    }
+    .container { max-width: 1140px; margin: 0 auto; }
+    .section-label {
+      display: inline-block;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--c-primary-2);
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(2rem, 4vw, 2.8rem);
+      font-weight: 800; line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+    .section-desc {
+      font-size: 1.05rem; color: var(--text-secondary);
+      max-width: 580px; line-height: 1.7;
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       PHILOSOPHY ΓÇö FIVE PILLARS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3.5rem;
+    }
+    .pillar-card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+    }
+    .pillar-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: var(--gradient-card);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .pillar-card:hover {
+      border-color: var(--c-border-glow);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(99,102,241,0.15);
+    }
+    .pillar-card:hover::before { opacity: 1; }
+    .pillar-icon {
+      width: 52px; height: 52px;
+      border-radius: var(--radius-md);
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; margin-bottom: 1.25rem;
+      position: relative;
+    }
+    .pillar-num {
+      position: absolute; top: -6px; right: -6px;
+      width: 20px; height: 20px;
+      border-radius: 50%; font-size: 10px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--gradient-hero); color: #fff;
+    }
+    .pillar-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.6rem; position: relative; }
+    .pillar-desc { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.7; position: relative; }
+    .pillar-code {
+      margin-top: 1rem;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: #c3e88d;
+      line-height: 1.7;
+      position: relative;
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       POSITIONING CHART
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .positioning-wrap {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
+      margin-top: 3.5rem; align-items: center;
+    }
+    .quadrant {
+      position: relative;
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      aspect-ratio: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .quadrant-label-x, .quadrant-label-y {
+      position: absolute;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-muted);
+    }
+    .quadrant-label-x { bottom: 10px; left: 50%; transform: translateX(-50%); }
+    .quadrant-label-y {
+      left: 10px; top: 50%;
+      transform: translateY(-50%) rotate(-90deg);
+      transform-origin: center;
+      writing-mode: initial;
+    }
+    .q-axis {
+      position: absolute;
+      background: rgba(255,255,255,0.06);
+    }
+    .q-axis-h { height: 1px; left: 2rem; right: 2rem; top: 50%; }
+    .q-axis-v { width: 1px; top: 2rem; bottom: 2rem; left: 50%; }
+    .q-dot {
+      position: absolute;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      cursor: default;
+    }
+    .q-dot-point {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid currentColor;
+    }
+    .q-dot-label { font-size: 9px; font-weight: 600; white-space: nowrap; }
+    .q-dot.hero-dot { color: var(--c-primary); }
+    .q-dot.hero-dot .q-dot-point { background: var(--c-primary); box-shadow: 0 0 12px var(--c-primary); width: 16px; height: 16px; }
+    .q-dot.hero-dot .q-dot-label { font-size: 10px; }
+    .q-dot.dim { color: var(--text-muted); }
+
+    .compare-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .compare-table th {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--text-muted);
+      padding: 8px 12px; text-align: left;
+      border-bottom: 1px solid var(--c-border);
+    }
+    .compare-table td {
+      padding: 10px 12px; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table .col-us { color: var(--c-success); font-weight: 600; }
+    .compare-table .col-no { color: var(--text-muted); }
+    .compare-table .col-part { color: var(--c-amber); }
+    .compare-table tr.featured { background: rgba(99,102,241,0.06); }
+    .compare-table tr.featured td:first-child { border-left: 2px solid var(--c-primary); }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       ENGINE CARDS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .engines-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem; margin-top: 3rem;
+    }
+    .engine-card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .engine-card:hover { border-color: var(--c-border-glow); transform: translateY(-3px); }
+    .engine-badge {
+      display: inline-block;
+      font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+      padding: 4px 10px; border-radius: 4px; margin-bottom: 1rem;
+    }
+    .engine-badge.im  { background: rgba(16,185,129,0.15); color: var(--c-success); }
+    .engine-badge.fil { background: rgba(99,102,241,0.15); color: var(--c-primary-2); }
+    .engine-badge.bt  { background: rgba(245,158,11,0.15); color: var(--c-amber); }
+    .engine-badge.lsm { background: rgba(6,182,212,0.15); color: var(--c-accent); }
+    .engine-name { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .engine-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+    .engine-use  { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.75rem; }
+    .engine-use strong { color: var(--c-primary-2); }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       FRAMEWORKS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .frameworks-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem; margin-top: 3rem;
+    }
+    .fw-card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+    }
+    .fw-card:hover {
+      border-color: var(--c-border-glow);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(99,102,241,0.12);
+    }
+    .fw-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1rem; }
+    .fw-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+    .fw-icon.spring { background: rgba(109,179,63,0.15); }
+    .fw-icon.quarkus { background: rgba(74,20,140,0.25); }
+    .fw-icon.micronaut { background: rgba(231,79,55,0.15); }
+    .fw-icon.vertx { background: rgba(48,130,200,0.15); }
+    .fw-name { font-size: 0.95rem; font-weight: 700; }
+    .fw-version { font-size: 11px; color: var(--text-muted); }
+    .fw-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.65; }
+    .fw-code {
+      margin-top: 1rem;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      font-family: var(--font-mono); font-size: 11px;
+      color: #c3e88d; line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       BENCHMARKS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .bench-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.25rem; margin-top: 2.5rem;
+    }
+    .bench-card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      text-align: center;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .bench-card:hover { border-color: var(--c-border-glow); transform: translateY(-3px); }
+    .bench-threads {
+      font-size: 11px; color: var(--text-muted); margin-bottom: 0.4rem;
+      font-family: var(--font-mono);
+    }
+    .bench-tps {
+      font-size: 1.6rem; font-weight: 900;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .bench-unit { font-size: 11px; color: var(--text-muted); }
+    .bench-name { font-size: 12px; font-weight: 600; margin-top: 0.5rem; color: var(--text-secondary); }
+    .bench-tag {
+      display: inline-block; margin-top: 0.5rem;
+      background: rgba(16,185,129,0.15); color: var(--c-success);
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 100px;
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       USE CASES
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .use-cases-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem; margin-top: 3rem;
+    }
+    .uc-card {
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      display: flex; gap: 1rem;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .uc-card:hover { border-color: var(--c-border-glow); transform: translateY(-3px); }
+    .uc-icon {
+      font-size: 28px; flex-shrink: 0;
+      width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-md);
+      background: rgba(99,102,241,0.1);
+    }
+    .uc-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .uc-desc { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.65; }
+    .uc-highlight {
+      display: inline-block; margin-top: 0.5rem;
+      font-size: 11px; font-weight: 700;
+      color: var(--c-primary-2);
+      font-family: var(--font-mono);
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       INSTALL SECTION
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .install-tabs {
+      display: flex; gap: 0.5rem;
+      margin-top: 2.5rem; flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 8px 16px; border-radius: var(--radius-sm);
+      background: transparent; border: 1px solid var(--c-border);
+      color: var(--text-secondary); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; font-family: var(--font-sans);
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: rgba(99,102,241,0.12);
+      border-color: var(--c-border-glow);
+      color: var(--text-primary);
+    }
+    .tab-content { display: none; margin-top: 1.5rem; }
+    .tab-content.active { display: block; }
+    .xml-block, .java-block {
+      background: rgba(14,16,24,0.9);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      font-family: var(--font-mono);
+      font-size: 13px; line-height: 1.8;
+      overflow-x: auto;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(99,102,241,0.15);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: var(--c-primary-2); font-size: 11px; font-weight: 600;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer;
+      font-family: var(--font-sans);
+      transition: background 0.2s;
+    }
+    .copy-btn:hover { background: rgba(99,102,241,0.25); }
+    .xml-tag { color: #ff7b7b; }
+    .xml-attr { color: #ffd580; }
+    .xml-val { color: #c3e88d; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       CONSOLE FEATURE GRID
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .console-features {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem; margin-top: 2.5rem;
+    }
+    .cf-item {
+      background: var(--c-bg-glass);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .cf-item:hover { border-color: var(--c-border-glow); transform: translateY(-2px); }
+    .cf-icon { font-size: 22px; margin-bottom: 0.6rem; }
+    .cf-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .cf-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       CTA BAND
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .cta-band {
+      background: var(--c-bg-card);
+      border-top: 1px solid var(--c-border);
+      border-bottom: 1px solid var(--c-border);
+      padding: 80px 2rem;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-band::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(99,102,241,0.12) 0%, transparent 70%);
+    }
+    .cta-band h2 {
+      font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 800;
+      margin-bottom: 1rem; position: relative;
+    }
+    .cta-band p { color: var(--text-secondary); margin-bottom: 2rem; font-size: 1.05rem; position: relative; }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       FOOTER
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    footer {
+      background: var(--c-bg); border-top: 1px solid var(--c-border);
+      padding: 3rem 2rem; text-align: center;
+      position: relative; z-index: 1;
+    }
+    .footer-logo { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.5rem; }
+    .footer-logo span {
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .footer-tagline { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; }
+    .footer-links { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .footer-links a { font-size: 13px; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--text-secondary); }
+    .footer-bottom { font-size: 12px; color: var(--text-muted); }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       UTILITIES / DECORATORS
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .divider { height: 1px; background: var(--c-border); margin: 0; }
+    .text-gradient {
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .badge-new {
+      display: inline-block;
+      background: rgba(6,182,212,0.15); color: var(--c-accent);
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 100px; vertical-align: middle; margin-left: 6px;
+      border: 1px solid rgba(6,182,212,0.25);
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       ANNOTATION BADGES
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .annotation-badges {
+      display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 2.5rem;
+    }
+    .ann-badge {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--c-bg-card);
+      border: 1px solid var(--c-border);
+      border-radius: var(--radius-md);
+      padding: 12px 18px;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .ann-badge:hover { border-color: var(--c-border-glow); transform: translateY(-2px); }
+    .ann-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .ann-name { font-size: 13px; font-weight: 700; }
+    .ann-pkg { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       RESPONSIVE
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    @media (max-width: 768px) {
+      .positioning-wrap { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      .hero-stats { gap: 1rem; }
+      .hero-stat-sep { display: none; }
+      .code-body { font-size: 12px; padding: 1rem; }
+    }
+
+    /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       SCROLL FADE-IN ANIMATION
+    ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+    .fade-up {
+      opacity: 0; transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+  </style>
 </head>
 <body>
-<header class="site-header">
-  <nav class="nav">
-    <a class="brand" href="#top" aria-label="JunifyDB home">
-      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#6366f1"/><path d="M10 11v10l10-10v10" stroke="white" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>JunifyDB</span>
-    </a>
-    <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
-    <div class="nav-links">
-      <a href="#features">Features</a>
-      <a href="#quickstart">Quick Start</a>
-      <a href="#engines">Engines</a>
-      <a href="#api">REST API</a>
-      <a href="#integrations">Integrations</a>
-      <a class="btn btn-small" href="https://github.com/armand-ratombotiana/JunifyDB" target="_blank" rel="noopener">GitHub</a>
+
+<div class="bg-grid"></div>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ NAV ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-logo-icon">J</div>
+    <span class="nav-logo-text">JunifyDB</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#philosophy">Philosophy</a></li>
+    <li><a href="#engines">Engines</a></li>
+    <li><a href="#frameworks">Frameworks</a></li>
+    <li><a href="#benchmarks">Performance</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="https://github.com/armand-ratombotiana/JunifyDB" class="nav-cta">GitHub Γåù</a></li>
+  </ul>
+</nav>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ HERO ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="hero-badge-dot"></span>
+    Java 17+ ┬╖ Spring Boot ┬╖ Quarkus ┬╖ Micronaut ┬╖ Vert.x
+  </div>
+
+  <h1>The Embedded Database<br /><span>Java Deserved All Along</span></h1>
+
+  <p class="hero-sub">
+    NoSQL + ANSI SQL in a single JAR. Documents, Key-Value, Redis structures,
+    Wide-Column ΓÇö all in-process, zero infrastructure, zero Docker.
+  </p>
+
+  <p class="hero-tagline">
+    <strong>"JunifyDB is to Document and Key-Value stores what H2 is to Relational databases."</strong>
+  </p>
+
+  <div class="hero-actions">
+    <a href="#install" class="btn-primary">ΓÜí Get Started</a>
+    <a href="https://github.com/armand-ratombotiana/JunifyDB" class="btn-secondary">Γÿà View on GitHub</a>
+    <a href="#benchmarks" class="btn-secondary">≡ƒôè Benchmarks</a>
+  </div>
+
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <span class="hero-stat-value">&lt; 15ms</span>
+      <span class="hero-stat-label">Startup time</span>
     </div>
-  </nav>
-</header>
-
-<main id="top">
-  <section class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">Embedded &middot; Multi-model &middot; JVM-native</p>
-      <h1>The embedded multi-model <span class="accent">NoSQL database</span> for the JVM</h1>
-      <p class="lede">JunifyDB packs document, key-value and column-family stores into one tiny embeddable engine — with ACID transactions, full-text and vector search, and a REST API. Think <strong>H2 for the NoSQL world</strong>.</p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#quickstart">Get Started</a>
-        <a class="btn btn-ghost" href="https://github.com/armand-ratombotiana/JunifyDB" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-      <div class="hero-badges">
-        <span class="badge">Java 17+</span>
-        <span class="badge">Apache-2.0</span>
-        <span class="badge">4 storage engines</span>
-        <span class="badge">ACID / MVCC</span>
-      </div>
+    <div class="hero-stat-sep"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">54K</span>
+      <span class="hero-stat-label">Peak ops/sec</span>
     </div>
-  </section>
-
-  <section id="features" class="section">
-    <h2>One engine, every workload</h2>
-    <p class="section-sub">Three data models, production-grade extras, zero external processes.</p>
-    <div class="grid cards-3">
-      <article class="card">
-        <h3>Document Store</h3>
-        <p>JSON-like documents with rich queries, secondary indexes, aggregation pipelines and TTL.</p>
-      </article>
-      <article class="card">
-        <h3>Key-Value Store</h3>
-        <p>Fast buckets for caching and sessions, with per-key TTL and hash/list/set structures.</p>
-      </article>
-      <article class="card">
-        <h3>Column-Family</h3>
-        <p>Wide-column rows for sparse data, column-level TTL, pagination and statistics.</p>
-      </article>
-      <article class="card">
-        <h3>ACID Transactions</h3>
-        <p>MVCC snapshot isolation with staged writes — commit atomically, roll back safely.</p>
-      </article>
-      <article class="card">
-        <h3>Search</h3>
-        <p>TF-IDF full-text search with highlighting, plus HNSW vector search for similarity.</p>
-      </article>
-      <article class="card">
-        <h3>Operate</h3>
-        <p>CDC streaming, async replication, LRU query cache, backups, metrics and health checks.</p>
-      </article>
+    <div class="hero-stat-sep"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">0</span>
+      <span class="hero-stat-label">Native deps</span>
     </div>
-  </section>
-
-  <section id="quickstart" class="section section-alt">
-    <h2>Quick start</h2>
-    <p class="section-sub">Add one dependency, embed the database, ship.</p>
-    <div class="tabs" role="tablist" aria-label="Quick start examples">
-      <button class="tab active" data-tab="maven" role="tab" aria-selected="true">Maven</button>
-      <button class="tab" data-tab="gradle" role="tab" aria-selected="false">Gradle</button>
-      <button class="tab" data-tab="java" role="tab" aria-selected="false">Java</button>
-      <button class="tab" data-tab="rest" role="tab" aria-selected="false">REST</button>
+    <div class="hero-stat-sep"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">4</span>
+      <span class="hero-stat-label">Storage engines</span>
     </div>
-    <div class="tab-panels">
-      <div class="tab-panel active" id="panel-maven" role="tabpanel">
-        <div class="codeblock"><button class="copy" data-copy="maven">Copy</button><pre><code>&lt;dependency&gt;
-    &lt;groupId&gt;org.junify.db&lt;/groupId&gt;
-    &lt;artifactId&gt;junify-db-core&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0&lt;/version&gt;
-&lt;/dependency&gt;</code></pre></div>
+    <div class="hero-stat-sep"></div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">3</span>
+      <span class="hero-stat-label">Annotation standards</span>
+    </div>
+  </div>
+
+  <!-- Hero code panel -->
+  <div class="hero-code-wrap">
+    <div class="code-panel">
+      <div class="code-panel-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-panel-title">QuickStart.java</span>
       </div>
-      <div class="tab-panel" id="panel-gradle" role="tabpanel">
-        <div class="codeblock"><button class="copy" data-copy="gradle">Copy</button><pre><code>implementation("org.junify.db:junify-db-core:1.0.0")</code></pre></div>
-      </div>
-      <div class="tab-panel" id="panel-java" role="tabpanel">
-        <div class="codeblock"><button class="copy" data-copy="java">Copy</button><pre><code>var db = JunifyDB.embed()
-    .storageEngine("FILE")   // or IN_MEMORY, B_TREE, LSM_TREE
-    .persistTo("data")
-    .build();
+      <div class="code-body">
+<span class="cmt">// Everything you need ΓÇö no config, no containers, no daemon</span>
+<span class="kw">try</span> (<span class="kw">var</span> db <span class="op">=</span> <span class="cls">JunifyDB</span>.<span class="fn">inMemory</span>()) {
 
-var users = db.documentCollection("users");
-var user = new Document();
-user.id("user-1");
-user.add("name", "Alice");
-user.add("age", 30);
-users.insert(user);
+  <span class="cmt">// ΓöÇΓöÇ ANSI SQL ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ</span>
+  db.<span class="fn">sql</span>(<span class="str">"INSERT INTO products (id, name, price) VALUES ('p1', 'Keyboard', 75.0)"</span>);
+  <span class="kw">var</span> results <span class="op">=</span> db.<span class="fn">sql</span>(<span class="str">"SELECT * FROM products WHERE price BETWEEN 50 AND 100"</span>);
 
-var adults = users.find(Query.eq("age", 30));</code></pre></div>
-      </div>
-      <div class="tab-panel" id="panel-rest" role="tabpanel">
-        <div class="codeblock"><button class="copy" data-copy="rest">Copy</button><pre><code># Start the server
-java -jar junify-db-core.jar --port 8080 --engine FILE --data-dir ./data
+  <span class="cmt">// ΓöÇΓöÇ Fluent Entity API ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ</span>
+  <span class="cls">List</span>&lt;<span class="cls">Product</span>&gt; items <span class="op">=</span> db.<span class="fn">from</span>(<span class="cls">Product</span>.class)
+      .<span class="fn">where</span>(<span class="str">"category = ? AND price &lt;= ?"</span>, <span class="str">"Peripherals"</span>, <span class="num">100.0</span>)
+      .<span class="fn">orderBy</span>(<span class="str">"price ASC"</span>).<span class="fn">limit</span>(<span class="num">10</span>).<span class="fn">list</span>();
 
-# Health check
-curl http://localhost:8080/api/health
+  <span class="cmt">// ΓöÇΓöÇ Document Collection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ</span>
+  db.<span class="fn">documentCollection</span>(<span class="str">"users"</span>)
+    .<span class="fn">insert</span>(<span class="cls">Document</span>.<span class="fn">of</span>(user.<span class="fn">toMap</span>()).<span class="fn">id</span>(user.<span class="fn">id</span>()));
 
-# Create a document
-curl -X POST http://localhost:8080/api/collections/users \
-    -H "Content-Type: application/json" \
-    -d '{"name": "Alice", "email": "alice@example.com"}'</code></pre></div>
+  <span class="cmt">// ΓöÇΓöÇ Key-Value &amp; Redis Structures ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ</span>
+  db.<span class="fn">keyValueBucket</span>(<span class="str">"sessions"</span>).<span class="fn">put</span>(<span class="str">"tok-1"</span>, <span class="str">"user-42"</span>);
+  db.<span class="fn">listBucket</span>(<span class="str">"jobs"</span>).<span class="fn">rpush</span>(<span class="str">"queue"</span>, <span class="str">"send-email"</span>, <span class="str">"resize-image"</span>);
+}
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section id="engines" class="section">
-    <h2>Storage engines</h2>
-    <p class="section-sub">Pick the trade-off per deployment — the API stays the same.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Engine</th><th>Best for</th><th>Persistence</th></tr></thead>
-        <tbody>
-          <tr><td><code>IN_MEMORY</code></td><td>Tests, caches, ephemeral data</td><td>No</td></tr>
-          <tr><td><code>FILE</code></td><td>General purpose, JSON + WAL</td><td>Yes</td></tr>
-          <tr><td><code>B_TREE</code></td><td>Sorted indexes, range queries</td><td>Yes</td></tr>
-          <tr><td><code>LSM_TREE</code></td><td>Write-heavy workloads, bloom filter</td><td>Yes</td></tr>
-        </tbody>
-      </table>
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ PHILOSOPHY ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section id="philosophy">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Design Principles</span>
+      <h2 class="section-title">Five Unwavering<br /><span class="text-gradient">Engineering Axioms</span></h2>
+      <p class="section-desc">
+        These are not marketing claims ΓÇö they are architectural constraints enforced in
+        every code path, from the storage engine to the framework starters.
+      </p>
     </div>
-    <h3 class="mini-heading">Security &amp; operations built in</h3>
-    <ul class="checklist">
-      <li>API-key authentication per endpoint</li>
-      <li>Rate limiting (1000 req/min per IP)</li>
-      <li>CORS + GZIP response compression</li>
-      <li>Real-time metrics stream and health endpoint</li>
-    </ul>
-  </section>
 
-  <section id="api" class="section section-alt">
-    <h2>REST API</h2>
-    <p class="section-sub">Every model is reachable over HTTP.</p>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Endpoint</th><th>Methods</th><th>Description</th></tr></thead>
-        <tbody>
-          <tr><td><code>/api/health</code></td><td>GET</td><td>Health check with system metrics</td></tr>
-          <tr><td><code>/api/collections/{name}</code></td><td>GET / POST</td><td>Document CRUD</td></tr>
-          <tr><td><code>/api/collections/{name}/{id}</code></td><td>GET / PUT / DELETE</td><td>Single document</td></tr>
-          <tr><td><code>/api/kv/{bucket}/{key}</code></td><td>GET / PUT / DELETE</td><td>Key-value operations</td></tr>
-          <tr><td><code>/api/columns/{name}/{key}</code></td><td>GET / PUT / DELETE</td><td>Column-family operations</td></tr>
-          <tr><td><code>/api/bulk/{collection}</code></td><td>POST</td><td>Batch operations</td></tr>
-          <tr><td><code>/api/cdc</code></td><td>GET / POST</td><td>Change-data-capture management</td></tr>
-          <tr><td><code>/api/schema</code></td><td>GET</td><td>List tables</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+    <div class="pillars-grid">
 
-  <section id="integrations" class="section">
-    <h2>Framework integrations</h2>
-    <p class="section-sub">Drop JunifyDB into your stack — each ships with a tested demo app.</p>
-    <div class="grid cards-4">
-      <article class="card">
-        <h3>Spring Boot</h3>
-        <p>Auto-configuration starter with <code>JunifyDBTemplate</code>.</p>
-        <code class="artifact">junify-db-spring-boot-starter</code>
-      </article>
-      <article class="card">
-        <h3>Quarkus</h3>
-        <p>CDI extension with build-time processing.</p>
-        <code class="artifact">junify-db-quarkus-extension</code>
-      </article>
-      <article class="card">
-        <h3>Micronaut</h3>
-        <p>Compile-time DI factory integration.</p>
-        <code class="artifact">junifydb-micronaut-integration</code>
-      </article>
-      <article class="card">
-        <h3>Vert.x</h3>
-        <p>Reactive verticle over the embedded core.</p>
-        <code class="artifact">junify-db-core</code>
-      </article>
-    </div>
-    <p class="note">Demo suites run green across all four frameworks plus multi-engine end-to-end validation (IN_MEMORY, FILE, B_TREE, LSM_TREE).</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary" href="https://github.com/armand-ratombotiana/JunifyDB/tree/main/demo" target="_blank" rel="noopener">Browse the demos</a>
-      <a class="btn btn-ghost" href="https://github.com/armand-ratombotiana/JunifyDB/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contribute</a>
-    </div>
-  </section>
-</main>
+      <div class="pillar-card fade-up">
+        <div class="pillar-icon">≡ƒÅù∩╕Å<span class="pillar-num">Γæá</span></div>
+        <h3 class="pillar-title">Embedded-First, Always</h3>
+        <p class="pillar-desc">
+          A database instance starts in a single method call and lives entirely within your JVM process.
+          No ports, no sockets, no child processes, no OS services.
+          The lifecycle of the database is the lifecycle of your application.
+        </p>
+        <div class="pillar-code">try (var db = JunifyDB.inMemory()) {<br>  // ... your whole app<br>} // closes cleanly Γ£ô</div>
+      </div>
 
-<footer class="site-footer">
-  <p><strong>JunifyDB</strong> — open source under the Apache License 2.0.</p>
-  <p><a href="https://github.com/armand-ratombotiana/JunifyDB" target="_blank" rel="noopener">GitHub</a> &middot; <a href="https://github.com/armand-ratombotiana/JunifyDB/issues" target="_blank" rel="noopener">Issues</a></p>
+      <div class="pillar-card fade-up">
+        <div class="pillar-icon">ΓÜÖ∩╕Å<span class="pillar-num">Γæí</span></div>
+        <h3 class="pillar-title">Zero Configuration by Default</h3>
+        <p class="pillar-desc">
+          <code>JunifyDB.inMemory()</code> yields a fully operational database with zero config files,
+          zero env vars, zero JVM flags. Every option has a production-safe default.
+          Persistence is one additional line when you need it.
+        </p>
+        <div class="pillar-code">JunifyDB.embed()<br>  .storageEngine(B_TREE)<br>  .persistTo("data/")<br>  .buildConfig()</div>
+      </div>
+
+      <div class="pillar-card fade-up">
+        <div class="pillar-icon">ΓÜí<span class="pillar-num">Γæó</span></div>
+        <h3 class="pillar-title">Dual-Engine: NoSQL + ANSI SQL</h3>
+        <p class="pillar-desc">
+          The same data is accessible via the fluent NoSQL API and a built-in ANSI SQL engine simultaneously.
+          Both share the same storage substrate. Switch paradigms mid-query. Mix freely.
+        </p>
+        <div class="pillar-code">db.sql("SELECT * FROM users")<br>db.from(User.class).where(...)</div>
+      </div>
+
+      <div class="pillar-card fade-up">
+        <div class="pillar-icon">≡ƒôÉ<span class="pillar-num">Γæú</span></div>
+        <h3 class="pillar-title">Tri-Standard Annotations</h3>
+        <p class="pillar-desc">
+          JunifyDB reads Eclipse JNoSQL, Jakarta Persistence, and Hibernate annotations
+          transparently at runtime with zero additional classpath dependencies.
+          Migrate standards without touching your domain model.
+        </p>
+        <div class="pillar-code">@Entity @Table(name="users")<br>@Column(name="email")<br>@jakarta.nosql.Column("em")</div>
+      </div>
+
+      <div class="pillar-card fade-up">
+        <div class="pillar-icon">≡ƒôí<span class="pillar-num">Γæñ</span></div>
+        <h3 class="pillar-title">Observable by Design</h3>
+        <p class="pillar-desc">
+          Every mutation emits a lifecycle event. Every operation is counted. Every anomaly surfaces.
+          Built-in event bus, atomic metrics counters, Change Data Capture, and tamper-evident audit trail.
+        </p>
+        <div class="pillar-code">db.events().on(AFTER_INSERT, e -><br>  log.info("inserted: {}", e.id()));</div>
+      </div>
+
+      <div class="pillar-card fade-up" style="border-color: rgba(6,182,212,0.25); background: linear-gradient(135deg, rgba(6,182,212,0.06), transparent);">
+        <div class="pillar-icon" style="background:rgba(6,182,212,0.12);">≡ƒº⌐</div>
+        <h3 class="pillar-title">Pluggable Storage Substrates</h3>
+        <p class="pillar-desc">
+          The query, collection, and transactional layers are fully decoupled from physical storage via the
+          <code>StorageEngine</code> SPI. Switch from RAM to B-Tree to LSM-Tree with a single enum change.
+        </p>
+        <div class="pillar-code">.storageEngine(IN_MEMORY)<br>.storageEngine(B_TREE)<br>.storageEngine(LSM_TREE)</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ POSITIONING ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section style="background: var(--c-bg-card); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Market Position</span>
+      <h2 class="section-title">Filling the <span class="text-gradient">Empty Quadrant</span></h2>
+      <p class="section-desc">
+        JunifyDB occupies a position that was previously empty in the JVM ecosystem:
+        embedded and multi-model. Not a relational database. Not a distributed daemon. Something new.
+      </p>
+    </div>
+
+    <div class="positioning-wrap fade-up">
+      <!-- Quadrant chart -->
+      <div class="quadrant">
+        <div class="q-axis q-axis-h"></div>
+        <div class="q-axis q-axis-v"></div>
+        <!-- JunifyDB -->
+        <div class="q-dot hero-dot" style="top:15%; left:65%;">
+          <div class="q-dot-point"></div>
+          <div class="q-dot-label">Γÿà JunifyDB</div>
+        </div>
+        <!-- H2 -->
+        <div class="q-dot dim" style="top:18%; left:22%;">
+          <div class="q-dot-point"></div>
+          <div class="q-dot-label">H2</div>
+        </div>
+        <!-- MongoDB -->
+        <div class="q-dot dim" style="top:75%; left:70%;">
+          <div class="q-dot-point"></div>
+          <div class="q-dot-label">MongoDB</div>
+        </div>
+        <!-- Redis -->
+        <div class="q-dot dim" style="top:68%; left:60%;">
+          <div class="q-dot-point"></div>
+          <div class="q-dot-label">Redis</div>
+        </div>
+        <!-- PostgreSQL -->
+        <div class="q-dot dim" style="top:78%; left:20%;">
+          <div class="q-dot-point"></div>
+          <div class="q-dot-label">PostgreSQL</div>
+        </div>
+        <span class="quadrant-label-x">MULTI-MODEL ΓåÆ</span>
+        <span class="quadrant-label-y">Γåæ EMBEDDED</span>
+      </div>
+
+      <!-- Comparison table -->
+      <div>
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>JunifyDB</th>
+              <th>H2</th>
+              <th>Flapdoodle</th>
+              <th>RocksDB</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="featured">
+              <td>Documents</td>
+              <td class="col-us">Γ£à Native</td>
+              <td class="col-part">ΓÜá∩╕Å JSON fn</td>
+              <td class="col-us">Γ£à BSON</td>
+              <td class="col-no">Γ¥î</td>
+            </tr>
+            <tr class="featured">
+              <td>Redis Structures</td>
+              <td class="col-us">Γ£à Native</td>
+              <td class="col-no">Γ¥î</td>
+              <td class="col-no">Γ¥î</td>
+              <td class="col-no">Γ¥î</td>
+            </tr>
+            <tr class="featured">
+              <td>ANSI SQL</td>
+              <td class="col-us">Γ£à Built-in</td>
+              <td class="col-us">Γ£à Full</td>
+              <td class="col-no">Γ¥î</td>
+              <td class="col-no">Γ¥î</td>
+            </tr>
+            <tr>
+              <td>100% Pure Java</td>
+              <td class="col-us">Γ£à</td>
+              <td class="col-us">Γ£à</td>
+              <td class="col-no">Γ¥î Binary</td>
+              <td class="col-no">Γ¥î C++/JNI</td>
+            </tr>
+            <tr>
+              <td>Startup</td>
+              <td class="col-us">&lt; 15ms</td>
+              <td class="col-part">~25ms</td>
+              <td class="col-no">3ΓÇô8 sec</td>
+              <td class="col-part">~50ms</td>
+            </tr>
+            <tr>
+              <td>Spring Boot Starter</td>
+              <td class="col-us">Γ£à</td>
+              <td class="col-us">Γ£à</td>
+              <td class="col-no">Γ¥î</td>
+              <td class="col-no">Γ¥î</td>
+            </tr>
+            <tr>
+              <td>Quarkus Extension</td>
+              <td class="col-us">Γ£à</td>
+              <td class="col-part">ΓÜá∩╕Å</td>
+              <td class="col-no">Γ¥î</td>
+              <td class="col-no">Γ¥î</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ ANNOTATION SUPPORT ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section>
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Standard Support</span>
+      <h2 class="section-title">Tri-Standard <span class="text-gradient">Annotation Support</span></h2>
+      <p class="section-desc">
+        Your existing entity classes work as-is. JunifyDB resolves all three major Java persistence
+        annotation standards at runtime without requiring their JARs on the classpath.
+      </p>
+    </div>
+
+    <div class="annotation-badges fade-up">
+      <div class="ann-badge">
+        <div class="ann-dot" style="background:#6366f1;"></div>
+        <div>
+          <div class="ann-name">Eclipse JNoSQL</div>
+          <div class="ann-pkg">jakarta.nosql.*</div>
+        </div>
+      </div>
+      <div class="ann-badge">
+        <div class="ann-dot" style="background:#06b6d4;"></div>
+        <div>
+          <div class="ann-name">Jakarta Persistence</div>
+          <div class="ann-pkg">jakarta.persistence.*</div>
+        </div>
+      </div>
+      <div class="ann-badge">
+        <div class="ann-dot" style="background:#f59e0b;"></div>
+        <div>
+          <div class="ann-name">Hibernate ORM</div>
+          <div class="ann-pkg">org.hibernate.annotations.*</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-panel fade-up" style="margin-top: 2rem; max-width: 700px;">
+      <div class="code-panel-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-panel-title">Product.java ΓÇö works with all three standards simultaneously</span>
+      </div>
+      <div class="code-body">
+<span class="kw">@jakarta.persistence.Entity</span>           <span class="cmt">// JPA</span>
+<span class="kw">@jakarta.persistence.Table</span>(name <span class="op">=</span> <span class="str">"products"</span>)
+<span class="kw">public class</span> <span class="cls">Product</span> {
+
+  <span class="kw">@jakarta.persistence.Id</span>
+  <span class="kw">@jakarta.nosql.Column</span>(<span class="str">"product_id"</span>)    <span class="cmt">// JNoSQL</span>
+  <span class="kw">private</span> <span class="cls">String</span> id;
+
+  <span class="kw">@jakarta.persistence.Column</span>(name <span class="op">=</span> <span class="str">"unit_price"</span>)
+  <span class="kw">private double</span> price;
+}
+
+<span class="cmt">// Works transparently ΓÇö no extra config</span>
+<span class="cls">List</span>&lt;<span class="cls">Product</span>&gt; items <span class="op">=</span> db.<span class="fn">from</span>(<span class="cls">Product</span>.class)
+    .<span class="fn">where</span>(<span class="str">"price > ?"</span>, <span class="num">50.0</span>).<span class="fn">list</span>();
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ STORAGE ENGINES ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section id="engines" style="background: var(--c-bg-card); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Storage Substrate</span>
+      <h2 class="section-title">Four Engines, <span class="text-gradient">One API</span></h2>
+      <p class="section-desc">
+        Switch storage strategies with a single enum. The collection, query, and transaction API
+        is identical across all four engines. No code changes required.
+      </p>
+    </div>
+    <div class="engines-grid fade-up">
+      <div class="engine-card">
+        <span class="engine-badge im">IN_MEMORY</span>
+        <div class="engine-name">Concurrent HashMap</div>
+        <div class="engine-desc">Backed by ConcurrentHashMap. Maximum throughput, zero GC overhead. Ephemeral ΓÇö data lives with the JVM process.</div>
+        <div class="engine-use"><strong>Best for:</strong> Unit tests, CI pipelines, microservice sessions, feature flags.</div>
+      </div>
+      <div class="engine-card">
+        <span class="engine-badge fil">FILE</span>
+        <div class="engine-name">Append-Only Log + WAL</div>
+        <div class="engine-desc">Append-only sequential log with Write-Ahead Logging and automatic crash-recovery replay.</div>
+        <div class="engine-use"><strong>Best for:</strong> Simple persistence, single-writer local apps, edge devices.</div>
+      </div>
+      <div class="engine-card">
+        <span class="engine-badge bt">B_TREE</span>
+        <div class="engine-name">B+ Tree Page Store</div>
+        <div class="engine-desc">High-performance index-backed block storage. Fast random key lookups and ordered range scans.</div>
+        <div class="engine-use"><strong>Best for:</strong> Read-heavy workloads, sorted queries, product catalogs.</div>
+      </div>
+      <div class="engine-card">
+        <span class="engine-badge lsm">LSM_TREE</span>
+        <div class="engine-name">Log-Structured Merge Tree</div>
+        <div class="engine-desc">Immutable SSTables with background compaction. Optimized for sequential write throughput.</div>
+        <div class="engine-use"><strong>Best for:</strong> Write-heavy workloads, time-series data, event ingestion.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ FRAMEWORKS ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section id="frameworks">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Framework Integration</span>
+      <h2 class="section-title">Native Starters for Every<br /><span class="text-gradient">Modern JVM Framework</span></h2>
+      <p class="section-desc">
+        First-class integrations ΓÇö not wrappers. Each starter provides auto-configuration,
+        dependency injection, and idiomatic usage patterns for its host framework.
+      </p>
+    </div>
+
+    <div class="frameworks-grid fade-up">
+
+      <div class="fw-card">
+        <div class="fw-header">
+          <div class="fw-icon spring">≡ƒìâ</div>
+          <div>
+            <div class="fw-name">Spring Boot</div>
+            <div class="fw-version">3.2.x ┬╖ Auto-configured</div>
+          </div>
+        </div>
+        <div class="fw-desc">
+          Zero-config AutoConfiguration. Inject <code>JunifyDB</code> or <code>JunifyDBTemplate</code>
+          directly. Full support for Spring application lifecycle hooks and property binding.
+        </div>
+        <div class="fw-code"><span class="kw">@Service</span><br><span class="kw">class</span> <span class="cls">OrderService</span> {<br>  <span class="kw">@Autowired</span> <span class="cls">JunifyDB</span> db;<br>}</div>
+      </div>
+
+      <div class="fw-card">
+        <div class="fw-header">
+          <div class="fw-icon quarkus">≡ƒö╖</div>
+          <div>
+            <div class="fw-name">Quarkus</div>
+            <div class="fw-version">3.8.x ┬╖ CDI Extension</div>
+          </div>
+        </div>
+        <div class="fw-desc">
+          Full CDI extension with build-time configuration, native-compatible APIs, and Quarkus
+          lifecycle integration via <code>@ApplicationScoped</code> producers.
+        </div>
+        <div class="fw-code"><span class="kw">@Inject</span><br><span class="cls">JunifyDB</span> db; <span class="cmt">// CDI Γ£ô</span></div>
+      </div>
+
+      <div class="fw-card">
+        <div class="fw-header">
+          <div class="fw-icon micronaut">≡ƒö┤</div>
+          <div>
+            <div class="fw-name">Micronaut</div>
+            <div class="fw-version">4.2.x ┬╖ Reflection-free</div>
+          </div>
+        </div>
+        <div class="fw-desc">
+          Reflection-free factory beans compatible with Micronaut's AOT compilation.
+          Full property binding via <code>@ConfigurationProperties</code>.
+        </div>
+        <div class="fw-code"><span class="cls">JunifyDB</span> db; <span class="cmt">// @Singleton Γ£ô</span></div>
+      </div>
+
+      <div class="fw-card">
+        <div class="fw-header">
+          <div class="fw-icon vertx">≡ƒö╡</div>
+          <div>
+            <div class="fw-name">Eclipse Vert.x</div>
+            <div class="fw-version">4.5.x ┬╖ Worker threads</div>
+          </div>
+        </div>
+        <div class="fw-desc">
+          Thread-safe worker verticle pattern using <code>executeBlocking</code>.
+          Async result wrapping for reactive event-loop integration.
+        </div>
+        <div class="fw-code">vertx.<span class="fn">executeBlocking</span>(<br>  p -> p.<span class="fn">complete</span>(db...)<br>)</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ BENCHMARKS ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section id="benchmarks" style="background: var(--c-bg-card); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Performance</span>
+      <h2 class="section-title">Measured, Not Estimated <span class="badge-new">Real Results</span></h2>
+      <p class="section-desc">
+        All numbers come from the <code>load-and-stress-demo</code> test suite running
+        <strong>6/6 JUnit tests with 0 failures</strong>.
+        IN_MEMORY engine, JVM in-process, <code>mvn test</code>.
+      </p>
+    </div>
+
+    <div class="bench-grid fade-up">
+      <div class="bench-card">
+        <div class="bench-threads">10 threads</div>
+        <div class="bench-tps">2,155</div>
+        <div class="bench-unit">ops/sec</div>
+        <div class="bench-name">Concurrent Writes</div>
+        <div class="bench-tag">0% errors</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-threads">50 threads</div>
+        <div class="bench-tps">14,881</div>
+        <div class="bench-unit">ops/sec</div>
+        <div class="bench-name">50-Thread Safety</div>
+        <div class="bench-tag">0% errors</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-threads">8 threads</div>
+        <div class="bench-tps">7,843</div>
+        <div class="bench-unit">ops/sec</div>
+        <div class="bench-name">Read-After-Write</div>
+        <div class="bench-tag">0 violations</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-threads">12 threads</div>
+        <div class="bench-tps">54,545</div>
+        <div class="bench-unit">ops/sec</div>
+        <div class="bench-name">Mixed Doc+KV</div>
+        <div class="bench-tag">0% errors</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-threads">20 threads ┬╖ 2s</div>
+        <div class="bench-tps">12,815</div>
+        <div class="bench-unit">writes total</div>
+        <div class="bench-name">Saturation Test</div>
+        <div class="bench-tag">0% errors</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ USE CASES ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section>
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Use Cases</span>
+      <h2 class="section-title">Where <span class="text-gradient">JunifyDB Shines</span></h2>
+    </div>
+    <div class="use-cases-grid fade-up">
+      <div class="uc-card">
+        <div class="uc-icon">≡ƒº¬</div>
+        <div>
+          <div class="uc-title">Integration Testing Without Docker</div>
+          <div class="uc-desc">Replace Testcontainers in your CI pipeline. No Docker daemon, no registry pull, no port binding. Start in under 15ms inside the same JVM.</div>
+          <div class="uc-highlight">ΓåÉ 15ms vs 3ΓÇô8 seconds for containers</div>
+        </div>
+      </div>
+      <div class="uc-card">
+        <div class="uc-icon">≡ƒôí</div>
+        <div>
+          <div class="uc-title">Edge & Desktop JVM Apps</div>
+          <div class="uc-desc">JavaFX apps, POS systems, IoT gateways. Single JAR, zero native dependencies, WAL crash recovery, pure Java portability across all architectures.</div>
+          <div class="uc-highlight">ΓåÉ ~1.2 MB JAR, 0 native binaries</div>
+        </div>
+      </div>
+      <div class="uc-card">
+        <div class="uc-icon">ΓÜí</div>
+        <div>
+          <div class="uc-title">In-Process Cache & Session Store</div>
+          <div class="uc-desc">Sub-microsecond local key-value lookups without Redis network round-trips. Built-in TTL, Redis-style lists, sets, and hashes.</div>
+          <div class="uc-highlight">ΓåÉ No network hop, no sidecar</div>
+        </div>
+      </div>
+      <div class="uc-card">
+        <div class="uc-icon">≡ƒÜÇ</div>
+        <div>
+          <div class="uc-title">Rapid Prototyping</div>
+          <div class="uc-desc">Add the dependency, call one method, start writing business logic. No infrastructure to configure or maintain across the team.</div>
+          <div class="uc-highlight">ΓåÉ One Maven dependency, zero setup</div>
+        </div>
+      </div>
+      <div class="uc-card">
+        <div class="uc-icon">≡ƒöä</div>
+        <div>
+          <div class="uc-title">Microservice State ΓÇö No Sidecar</div>
+          <div class="uc-desc">Rate limiters, feature flags, task queues, event journals ΓÇö all inside your application boundary. No Redis sidecar, no extra Kubernetes pod.</div>
+          <div class="uc-highlight">ΓåÉ Eliminates the sidecar cost entirely</div>
+        </div>
+      </div>
+      <div class="uc-card">
+        <div class="uc-icon">≡ƒôª</div>
+        <div>
+          <div class="uc-title">Library and SDK Embedding</div>
+          <div class="uc-desc">Ship a library that includes its own embedded storage without forcing consumers to configure external databases. Pure JVM portability.</div>
+          <div class="uc-highlight">ΓåÉ Embed in libraries, not just apps</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ CONSOLE ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section style="background: var(--c-bg-card); border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border);">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Developer Tooling</span>
+      <h2 class="section-title">Built-in <span class="text-gradient">Developer Console</span></h2>
+      <p class="section-desc">
+        Start the embedded web server for local inspection, SQL queries, and metrics ΓÇö all inside
+        your running process. No external tools to install.
+      </p>
+    </div>
+    <div class="code-panel fade-up" style="max-width: 620px; margin: 2rem 0;">
+      <div class="code-panel-header">
+        <div class="code-dot code-dot-r"></div>
+        <div class="code-dot code-dot-y"></div>
+        <div class="code-dot code-dot-g"></div>
+        <span class="code-panel-title">Terminal</span>
+      </div>
+      <div class="code-body" style="font-size: 13px;">
+<span class="cmt">$ </span>java -jar junify-db-core-1.0.0.jar \<br>
+  &nbsp;&nbsp;--port 8080 --engine B_TREE --data-dir ./data<br>
+<br>
+<span class="cmt">ΓåÆ Console ready at http://localhost:8080</span>
+      </div>
+    </div>
+    <div class="console-features fade-up">
+      <div class="cf-item"><div class="cf-icon">≡ƒôè</div><div class="cf-name">Overview & Metrics</div><div class="cf-desc">JVM memory, thread counts, throughput counters</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒôä</div><div class="cf-name">Document Collections</div><div class="cf-desc">CRUD, full-text preview, schema inspector</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒöæ</div><div class="cf-name">Key-Value Store</div><div class="cf-desc">Get / put / delete with TTL visualization</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒùé∩╕Å</div><div class="cf-name">Redis Structures</div><div class="cf-desc">Lists, Sets, Hashes with visual inspector</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒº⌐</div><div class="cf-name">Wide-Column Families</div><div class="cf-desc">Row / column matrix viewer</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒÆ╛</div><div class="cf-name">ANSI SQL Studio</div><div class="cf-desc">Interactive SQL editor with result table</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒôí</div><div class="cf-name">Change Data Capture</div><div class="cf-desc">Live CDC event stream viewer</div></div>
+      <div class="cf-item"><div class="cf-icon">≡ƒöÉ</div><div class="cf-name">Audit Trail</div><div class="cf-desc">Tamper-evident operation log</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ INSTALL ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<section id="install">
+  <div class="container">
+    <div class="fade-up">
+      <span class="section-label">Get Started</span>
+      <h2 class="section-title">Add One Dependency.<br /><span class="text-gradient">Write Business Logic.</span></h2>
+    </div>
+
+    <div class="install-tabs fade-up">
+      <button class="tab-btn active" onclick="showTab('core')">Core</button>
+      <button class="tab-btn" onclick="showTab('spring')">Spring Boot</button>
+      <button class="tab-btn" onclick="showTab('quarkus')">Quarkus</button>
+      <button class="tab-btn" onclick="showTab('micronaut')">Micronaut</button>
+    </div>
+
+    <div id="tab-core" class="tab-content active fade-up">
+      <div class="xml-block">
+        <button class="copy-btn" onclick="copyCode('tab-core')">Copy</button>
+<span class="xml-tag">&lt;dependency&gt;</span>
+  <span class="xml-tag">&lt;groupId&gt;</span><span class="xml-val">org.junify.db</span><span class="xml-tag">&lt;/groupId&gt;</span>
+  <span class="xml-tag">&lt;artifactId&gt;</span><span class="xml-val">junify-db-core</span><span class="xml-tag">&lt;/artifactId&gt;</span>
+  <span class="xml-tag">&lt;version&gt;</span><span class="xml-val">1.0.0</span><span class="xml-tag">&lt;/version&gt;</span>
+<span class="xml-tag">&lt;/dependency&gt;</span>
+      </div>
+    </div>
+
+    <div id="tab-spring" class="tab-content fade-up">
+      <div class="xml-block">
+        <button class="copy-btn" onclick="copyCode('tab-spring')">Copy</button>
+<span class="xml-tag">&lt;dependency&gt;</span>
+  <span class="xml-tag">&lt;groupId&gt;</span><span class="xml-val">org.junify.db</span><span class="xml-tag">&lt;/groupId&gt;</span>
+  <span class="xml-tag">&lt;artifactId&gt;</span><span class="xml-val">junify-db-spring-boot-starter</span><span class="xml-tag">&lt;/artifactId&gt;</span>
+  <span class="xml-tag">&lt;version&gt;</span><span class="xml-val">1.0.0</span><span class="xml-tag">&lt;/version&gt;</span>
+<span class="xml-tag">&lt;/dependency&gt;</span>
+
+<span class="cmt">&lt;!-- application.yml (all optional ΓÇö zero config needed) --&gt;</span>
+<span class="xml-attr">junifydb:</span>
+  <span class="xml-attr">  storage-engine:</span> <span class="xml-val">IN_MEMORY</span>
+  <span class="xml-attr">  data-dir:</span> <span class="xml-val">data/</span>
+      </div>
+    </div>
+
+    <div id="tab-quarkus" class="tab-content fade-up">
+      <div class="xml-block">
+        <button class="copy-btn" onclick="copyCode('tab-quarkus')">Copy</button>
+<span class="xml-tag">&lt;dependency&gt;</span>
+  <span class="xml-tag">&lt;groupId&gt;</span><span class="xml-val">org.junify.db</span><span class="xml-tag">&lt;/groupId&gt;</span>
+  <span class="xml-tag">&lt;artifactId&gt;</span><span class="xml-val">junify-db-quarkus-extension-runtime</span><span class="xml-tag">&lt;/artifactId&gt;</span>
+  <span class="xml-tag">&lt;version&gt;</span><span class="xml-val">1.0.0</span><span class="xml-tag">&lt;/version&gt;</span>
+<span class="xml-tag">&lt;/dependency&gt;</span>
+      </div>
+    </div>
+
+    <div id="tab-micronaut" class="tab-content fade-up">
+      <div class="xml-block">
+        <button class="copy-btn" onclick="copyCode('tab-micronaut')">Copy</button>
+<span class="xml-tag">&lt;dependency&gt;</span>
+  <span class="xml-tag">&lt;groupId&gt;</span><span class="xml-val">org.junify.db</span><span class="xml-tag">&lt;/groupId&gt;</span>
+  <span class="xml-tag">&lt;artifactId&gt;</span><span class="xml-val">junifydb-micronaut-integration</span><span class="xml-tag">&lt;/artifactId&gt;</span>
+  <span class="xml-tag">&lt;version&gt;</span><span class="xml-val">1.0.0</span><span class="xml-tag">&lt;/version&gt;</span>
+<span class="xml-tag">&lt;/dependency&gt;</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ CTA BAND ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<div class="cta-band">
+  <h2>Write Code. <span class="text-gradient">Not Infrastructure.</span></h2>
+  <p>JunifyDB embeds everything. You embed nothing but logic.</p>
+  <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+    <a href="https://github.com/armand-ratombotiana/JunifyDB" class="btn-primary">Γ¡É Star on GitHub</a>
+    <a href="#install" class="btn-secondary">ΓÜí Quick Start</a>
+  </div>
+</div>
+
+<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ FOOTER ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+<footer>
+  <div class="footer-logo"><span>JunifyDB</span></div>
+  <div class="footer-tagline">The embedded dual-engine database for Java ΓÇö NoSQL + ANSI SQL, zero infrastructure.</div>
+  <div class="footer-links">
+    <a href="https://github.com/armand-ratombotiana/JunifyDB">GitHub</a>
+    <a href="https://github.com/armand-ratombotiana/JunifyDB/blob/main/README.md">Documentation</a>
+    <a href="https://github.com/armand-ratombotiana/JunifyDB/blob/main/demo/VALIDATION-MATRIX.md">Validation Matrix</a>
+    <a href="https://github.com/armand-ratombotiana/JunifyDB/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/armand-ratombotiana/JunifyDB/blob/main/LICENSE">Apache 2.0</a>
+  </div>
+  <div class="footer-bottom">┬⌐ 2026 JunifyDB Contributors ┬╖ Apache License 2.0</div>
 </footer>
 
-<script src="main.js"></script>
+<script>
+  /* ΓöÇΓöÇ Tab switching ΓöÇΓöÇ */
+  function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+
+  /* ΓöÇΓöÇ Copy button ΓöÇΓöÇ */
+  function copyCode(tabId) {
+    const el = document.getElementById(tabId).querySelector('.xml-block');
+    const text = el.innerText.replace(/^Copy\n/, '');
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = el.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1800);
+    });
+  }
+
+  /* ΓöÇΓöÇ Scroll fade-in ΓöÇΓöÇ */
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        // Stagger children
+        const children = e.target.querySelectorAll('.pillar-card, .engine-card, .fw-card, .bench-card, .uc-card, .cf-item');
+        children.forEach((c, i) => {
+          setTimeout(() => c.classList.add('visible'), i * 60);
+        });
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  /* ΓöÇΓöÇ Add fade-up to nested grid items ΓöÇΓöÇ */
+  document.querySelectorAll('.pillar-card, .engine-card, .fw-card, .bench-card, .uc-card, .cf-item, .ann-badge').forEach(el => {
+    el.classList.add('fade-up');
+    observer.observe(el);
+  });
+</script>
 </body>
 </html>
