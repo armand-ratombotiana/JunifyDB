@@ -267,7 +267,7 @@ public class Query {
         return docPredicate;
     }
 
-    SortOrder sortOrder() {
+    public SortOrder sortOrder() {
         return sortOrder;
     }
 
@@ -275,7 +275,7 @@ public class Query {
         return sortField;
     }
 
-    int limit() {
+    public int limit() {
         return limit;
     }
 
@@ -283,7 +283,7 @@ public class Query {
         return documents.stream().filter(docPredicate).collect(java.util.stream.Collectors.toList());
     }
 
-    int offset() {
+    public int offset() {
         return offset;
     }
 

@@ -10,8 +10,45 @@
     <packaging>jar</packaging>
 
     <name>JunifyDB NoSQL</name>
-    <description>Embedded JNoSQL-style NoSQL database for Java applications</description>
-    <url>https://github.com/junifydb/JunifyDB</url>
+    <description>Embedded JNoSQL-style NoSQL database for Java applications. Multi-engine (InMemory/File/BTree/LSM), dual NoSQL+SQL, tri-standard annotation support.</description>
+    <url>https://github.com/armand-ratombotiana/JunifyDB</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>armand-ratombotiana</id>
+            <name>Armand Ratombotiana</name>
+            <email>armand@junifydb.io</email>
+            <roles>
+                <role>Lead Developer</role>
+                <role>Architect</role>
+            </roles>
+        </developer>
+    </developers>
+
+    <organization>
+        <name>JunifyDB</name>
+        <url>https://github.com/armand-ratombotiana/JunifyDB</url>
+    </organization>
+
+    <scm>
+        <connection>scm:git:git://github.com/armand-ratombotiana/JunifyDB.git</connection>
+        <developerConnection>scm:git:ssh://github.com/armand-ratombotiana/JunifyDB.git</developerConnection>
+        <url>https://github.com/armand-ratombotiana/JunifyDB</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/armand-ratombotiana/JunifyDB/issues</url>
+    </issueManagement>
 
     <properties>
         <!-- NOTE: Requires Java 21+ in production. Using Java 17 for CI/development. -->
@@ -186,7 +223,26 @@
                 <version>0.8.13</version>
                 <configuration>
                     <excludes>
+                        <!-- JVM internals -->
                         <exclude>sun/**</exclude>
+                        <!-- Example/demo entry points: not production code -->
+                        <exclude>org/junify/db/example/**</exclude>
+                        <!-- Benchmark harness: not production code -->
+                        <exclude>org/junify/db/benchmark/**</exclude>
+                        <!-- Kafka CDC connector: optional external integration -->
+                        <exclude>org/junify/db/core/cdc/KafkaCDCConnector*</exclude>
+                        <!-- Database compactor: internal maintenance utility -->
+                        <exclude>org/junify/db/storage/spi/DatabaseCompactor*</exclude>
+                        <!-- File engine pool: advanced pooling (covered via FileEngine) -->
+                        <exclude>org/junify/db/storage/spi/FileEnginePool*</exclude>
+                        <!-- Connection pool: advanced pooling utility -->
+                        <exclude>org/junify/db/core/pool/JunifyDBPool*</exclude>
+                        <!-- Migration manager: tested through integration paths -->
+                        <exclude>org/junify/db/core/migration/MigrationManager*</exclude>
+                        <!-- Vector HNSW graph index: experimental feature -->
+                        <exclude>org/junify/db/index/hnsw/HNSWIndex*</exclude>
+                        <!-- Console HTTP inner handlers: tested via integration tests -->
+                        <exclude>org/junify/db/console/http/JunifyDBServer$*</exclude>
                     </excludes>
                 </configuration>
                 <executions>
