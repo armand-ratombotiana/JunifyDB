@@ -1189,7 +1189,7 @@ public class JunifyDBServer {
             var key = parts[5];
             
             // If only bucket and key (no operation), return full list
-            if (parts.length == 5 || (parts.length == 6 && parts[6].isEmpty())) {
+            if (parts.length == 6) {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     var result = bucket.lrange(key, 0, -1);
                     sendJson(exchange, 200, Map.of("key", key, "values", result, "length", result.size()));
@@ -1347,7 +1347,7 @@ public class JunifyDBServer {
             var key = parts[5];
             
             // If only bucket and key (no operation), return all members
-            if (parts.length == 5 || (parts.length == 6 && parts[6].isEmpty())) {
+            if (parts.length == 6) {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     var members = bucket.smembers(key);
                     sendJson(exchange, 200, Map.of("key", key, "members", members, "cardinality", members.size()));
@@ -1528,7 +1528,7 @@ public class JunifyDBServer {
             var key = parts[5];
             
             // If only bucket and key (no operation), return all fields
-            if (parts.length == 5 || (parts.length == 6 && parts[6].isEmpty())) {
+            if (parts.length == 6) {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     var fields = bucket.hgetall(key);
                     sendJson(exchange, 200, Map.of("key", key, "fields", fields, "length", fields.size()));
