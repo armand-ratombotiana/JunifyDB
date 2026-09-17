@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
  * - Column family statistics
  *
  * Storage format for columns with TTL:
+ * <pre>{@code
  * {
  *   "columns": {
  *     "columnName": {
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
  *     }
  *   }
  * }
+ * }</pre>
  */
 public class ColumnFamily {
 

@@ -30,17 +30,17 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Runnable demonstration and verification program exercising all core features
  * of JunifyDB (Embedded NoSQL database for Java):
  *
- * 1. Database Lifecycle & In-Memory Storage Engine
- * 2. Document Collection (CRUD, Flexible Schema, Queries & Secondary Indexing)
+ * 1. Database Lifecycle &amp; In-Memory Storage Engine
+ * 2. Document Collection (CRUD, Flexible Schema, Queries &amp; Secondary Indexing)
  * 3. Key-Value Store (CRUD, Existence, Multi-Key operations)
  * 4. Redis-Style List Bucket (LPUSH, RPUSH, LRANGE, LPOP, LLEN)
  * 5. Redis-Style Set Bucket (SADD, SISMEMBER, SMEMBERS, SCARD, SREM)
  * 6. Redis-Style Hash Bucket (HSET, HGET, HGETALL, HDEL, HLEN)
  * 7. Wide-Column Family (Put, Get, GetRow, Column-level metadata)
  * 8. ACID / MVCC Transactions (Snapshot Isolation, Write, Read, Commit, Rollback)
- * 9. Real-Time EventBus & Database Metrics
- * 10. Embedded HTTP Server & REST Management Console
- * 11. Persistent Storage Engine (B-Tree Disk Persistence & Reload)
+ * 9. Real-Time EventBus &amp; Database Metrics
+ * 10. Embedded HTTP Server &amp; REST Management Console
+ * 11. Persistent Storage Engine (B-Tree Disk Persistence &amp; Reload)
  */
 public class JunifyDBFeatureDemo {
 
