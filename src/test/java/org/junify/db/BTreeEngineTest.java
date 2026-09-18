@@ -2,6 +2,9 @@ package org.junify.db;
 
 import org.junify.db.nosql.document.Document;
 import org.junify.db.storage.spi.BTreeEngine;
+import org.junify.db.storage.spi.FileEngine;
+import org.junify.db.storage.spi.InMemoryEngine;
+import org.junify.db.storage.spi.LSMTreeEngine;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +45,32 @@ class BTreeEngineTest {
                 }
             }
             dir.delete();
+        }
+    }
+
+    @Test
+    void capabilityMatrixReflectsActualSupport() throws Exception {
+        var inMemory = new InMemoryEngine();
+        assertFalse(inMemory.isPersistent());
+        assertFalse(inMemory.supportsTransactions());
+        assertFalse(inMemory.supportsIndexes());
+
+        try (var file = new FileEngine(java.nio.file.Files.createTempDirectory("file_engine_caps"))) {
+            assertTrue(file.isPersistent());
+            assertFalse(file.supportsTransactions());
+            assertFalse(file.supportsIndexes());
+        }
+
+        try (var lsm = new LSMTreeEngine(java.nio.file.Files.createTempDirectory("lsm_engine_caps"))) {
+            assertTrue(lsm.isPersistent());
+            assertFalse(lsm.supportsTransactions());
+            assertFalse(lsm.supportsIndexes());
+        }
+
+        try (var btree = new BTreeEngine(java.nio.file.Files.createTempDirectory("btree_engine_caps"))) {
+            assertTrue(btree.isPersistent());
+            assertFalse(btree.supportsTransactions());
+            assertFalse(btree.supportsIndexes());
         }
     }
 

@@ -2,8 +2,8 @@
 
 # JunifyDB
 
-**The embedded dual-engine database for Java.**  
-NoSQL + ANSI SQL — one JAR, zero infrastructure, no Docker, no daemon.
+**The embedded multi-model database for Java.**  
+NoSQL + SQL subset — one JAR, zero infrastructure, no Docker, no daemon.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/)
@@ -18,13 +18,13 @@ NoSQL + ANSI SQL — one JAR, zero infrastructure, no Docker, no daemon.
 
 ## Why JunifyDB?
 
-> **"JunifyDB is to Document and Key-Value stores what H2 is to Relational databases."**
+> **"JunifyDB is the embedded multi-model option for Java teams who want one database, one JVM, and no infrastructure tax."**
 
 Java developers carry a hidden tax on every project: before writing a single line of business logic, they must provision infrastructure — Docker containers, Redis daemons, MongoDB processes, Cassandra clusters. Even for a unit test. Even for a local prototype.
 
 **JunifyDB eliminates that tax entirely.**
 
-Embed a full-featured, production-grade multi-model database directly inside your JVM process. Call one line of code. Write your business logic. Ship.
+Embed a lightweight, embedded multi-model database directly inside your JVM process. Call one line of code. Write your business logic. Ship.
 
 ```java
 // Everything you need. Nothing you don't.
@@ -53,7 +53,7 @@ try (var db = JunifyDB.inMemory()) {   // born here
 
 ### ② Zero Configuration by Default
 
-Calling `JunifyDB.inMemory()` yields a fully operational, production-equivalent database instance with zero configuration files, zero environment variables, and zero JVM flags. Every option has a sensible default; every default is production-safe.
+Calling `JunifyDB.inMemory()` yields a ready-to-use embedded database with zero configuration files, zero environment variables, and zero JVM flags. Every option has a sensible default; every default is designed for local development and test workloads.
 
 When you need persistence, one line:
 
@@ -65,14 +65,14 @@ var db = JunifyDB.create(JunifyDB.embed()
     .buildConfig());
 ```
 
-### ③ Dual-Engine: NoSQL + ANSI SQL Over the Same Data
+### ③ Dual-Engine: NoSQL + SQL Subset Over the Same Data
 
 Most databases force you to choose a paradigm. JunifyDB does not. The same data collection is simultaneously accessible via:
 
 - **Fluent NoSQL API** — document queries, criteria builders, key-value ops
-- **ANSI SQL engine** — `SELECT`, `INSERT`, `GROUP BY`, `JOIN`, `BETWEEN`, `LIKE`
+- **SQL subset engine** — `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `JOIN`, `GROUP BY`, `BETWEEN`, `LIKE`
 
-Both engines share the same in-memory or disk storage substrate. Switch paradigms mid-query. Mix freely.
+Both APIs share the same in-memory or disk storage substrate. The SQL layer is designed to be ergonomic and useful for embedded Java applications, while remaining a focused subset rather than a full database-compatibility engine.
 
 ### ④ Tri-Standard Annotation Support
 
@@ -126,7 +126,7 @@ JunifyDB occupies the **upper-right quadrant**: embedded and multi-model. A nich
 | **Primary model** | Multi-Model (Doc, KV, Column) | Relational SQL | Relational SQL | Document only | Key-Value only |
 | **Document queries** | ✅ Native | ⚠️ JSON functions | ⚠️ JSON1 ext | ✅ Native | ❌ |
 | **Redis structures** | ✅ Native | ❌ | ❌ | ❌ | ❌ |
-| **ANSI SQL** | ✅ Built-in | ✅ Full | ✅ Full | ❌ | ❌ |
+| **SQL support** | ✅ Built-in subset | ✅ Full | ✅ Full | ❌ | ❌ |
 | **100% Pure Java** | ✅ | ✅ | ❌ (C binaries) | ❌ (downloads binary) | ❌ (C++ / JNI) |
 | **Startup time** | **< 15 ms** | ~25 ms | ~30 ms | 3,000–8,000 ms | ~50 ms |
 | **Spring Boot starter** | ✅ | ✅ | ⚠️ | ❌ | ❌ |
@@ -179,10 +179,12 @@ JunifyDB occupies the **upper-right quadrant**: embedded and multi-model. A nich
 
 ### In-Memory Database (Testing & Microservices)
 
+> SQL support in JunifyDB is a useful embedded subset for Java applications. It is intentionally ergonomic and practical, but not a replacement for a full enterprise SQL engine.
+
 ```java
 try (var db = JunifyDB.inMemory()) {
 
-    // ── ANSI SQL ──────────────────────────────────────────────
+    // ── SQL subset ─────────────────────────────────────────────
     db.sql("INSERT INTO products (id, title, price) VALUES ('p1', 'Keyboard', 75.0)");
     var results = db.sql("SELECT * FROM products WHERE price BETWEEN 50 AND 100");
     System.out.println("Found: " + results.size());

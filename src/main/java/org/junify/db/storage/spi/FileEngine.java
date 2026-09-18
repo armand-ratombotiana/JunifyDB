@@ -71,6 +71,11 @@ public class FileEngine implements StorageEngine {
     }
 
     @Override
+    public boolean isPersistent() {
+        return true;
+    }
+
+    @Override
     public void put(String collection, String key, String value) {
         store.computeIfAbsent(collection, k -> new ConcurrentHashMap<>()).put(key, value);
         

@@ -164,23 +164,24 @@ public interface StorageEngine {
     // === Engine Capabilities ===
 
     /**
-     * Check if engine supports transactions.
+     * Check if engine supports native transactions.
+     * JunifyDB's MVCC layer is application-level and not all storage engines
+     * implement transaction primitives directly.
      */
     default boolean supportsTransactions() {
         return false;
     }
 
     /**
-     * Check if engine supports indexes.
+     * Check if engine supports native index management.
+     * Document-level secondary indexes are handled above the SPI layer.
      */
     default boolean supportsIndexes() {
         return false;
     }
 
-
-
     /**
-     * Check if engine is persistent (vs in-memory).
+     * Check if engine persists data beyond the JVM lifetime.
      */
     default boolean isPersistent() {
         return false;

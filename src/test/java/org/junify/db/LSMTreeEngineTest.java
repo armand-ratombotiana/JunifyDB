@@ -103,6 +103,48 @@ class LSMTreeEngineTest {
     }
 
     @Test
+    void testNewestValueWinsAcrossFlushesAndDeletes() {
+        var users = db.documentCollection("users");
+        var alice = Document.of("name", "Alice").id("u1");
+        users.insert(alice);
+        db.flush();
+
+        alice.add("name", "Alicia");
+        users.update(alice);
+        db.flush();
+
+        assertEquals("Alicia", users.findById("u1").get("name"));
+        assertEquals(1, users.findAll().size());
+
+        assertTrue(users.deleteById("u1"));
+        db.flush();
+
+        assertNull(users.findById("u1"));
+        assertTrue(users.findAll().isEmpty());
+        assertEquals(0, users.count());
+    }
+
+    @Test
+    void testNewestValueWinsAfterRestart() {
+        var users = db.documentCollection("users");
+        var alice = Document.of("name", "Alice").id("u1");
+        users.insert(alice);
+        db.flush();
+
+        alice.add("name", "Alicia");
+        users.update(alice);
+        db.flush();
+        db.close();
+
+        db = JunifyDB.embed()
+                .storageEngine(JunifyDBConfig.StorageEngineType.LSM_TREE)
+                .persistTo(tempDir.toString())
+                .build();
+
+        assertEquals("Alicia", db.documentCollection("users").findById("u1").get("name"));
+    }
+
+    @Test
     void testFlush() {
         var users = db.documentCollection("users");
         for (int i = 0; i < 100; i++) {

@@ -80,6 +80,11 @@ public class LSMTreeEngine implements StorageEngine {
     }
 
     @Override
+    public boolean isPersistent() {
+        return true;
+    }
+
+    @Override
     public void put(String collection, String key, String value) {
         checkOpen();
         String compositeKey = compositeKey(collection, key);
@@ -125,20 +130,18 @@ public class LSMTreeEngine implements StorageEngine {
         
         memtableLock.readLock().lock();
         try {
-            String value = memtable.get(compositeKey);
-            if (value != null) {
-                if (isTombstone(value)) return null;
-                return value;
+            if (memtable.containsKey(compositeKey)) {
+                String value = memtable.get(compositeKey);
+                return isTombstone(value) ? null : value;
             }
         } finally {
             memtableLock.readLock().unlock();
         }
         
         for (SSTable sstable : sstables) {
-            String value = sstable.get(compositeKey);
-            if (value != null) {
-                if (isTombstone(value)) return null;
-                return value;
+            if (sstable.containsKey(compositeKey)) {
+                String value = sstable.rawValue(compositeKey);
+                return isTombstone(value) ? null : value;
             }
         }
         
@@ -182,24 +185,9 @@ public class LSMTreeEngine implements StorageEngine {
     public List<String> scan(String collection) {
         checkOpen();
         String prefix = collection + ":";
-        List<String> results = new ArrayList<>();
-        
-        memtableLock.readLock().lock();
-        try {
-            for (var entry : memtable.entrySet()) {
-                if (entry.getKey().startsWith(prefix) && !isTombstone(entry.getValue())) {
-                    results.add(entry.getValue());
-                }
-            }
-        } finally {
-            memtableLock.readLock().unlock();
-        }
-        
-        for (SSTable sstable : sstables) {
-            results.addAll(sstable.scan(prefix));
-        }
-        
-        return results;
+        return visibleEntries(prefix).values().stream()
+                .filter(value -> !isTombstone(value))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -211,24 +199,10 @@ public class LSMTreeEngine implements StorageEngine {
     public Set<String> keys(String collection) {
         checkOpen();
         String prefix = collection + ":";
-        Set<String> keys = new HashSet<>();
-        
-        memtableLock.readLock().lock();
-        try {
-            for (var entry : memtable.entrySet()) {
-                if (entry.getKey().startsWith(prefix) && !isTombstone(entry.getValue())) {
-                    keys.add(extractKey(entry.getKey()));
-                }
-            }
-        } finally {
-            memtableLock.readLock().unlock();
-        }
-        
-        for (SSTable sstable : sstables) {
-            keys.addAll(sstable.keys(prefix));
-        }
-        
-        return keys;
+        return visibleEntries(prefix).entrySet().stream()
+                .filter(entry -> !isTombstone(entry.getValue()))
+                .map(entry -> extractKey(entry.getKey()))
+                .collect(Collectors.toSet());
     }
 
     @Override
@@ -281,11 +255,10 @@ public class LSMTreeEngine implements StorageEngine {
 
     @Override
     public int size() {
-        int total = memtable.size();
-        for (var sstable : sstables) {
-            total += sstable.data.size();
-        }
-        return total;
+        return visibleEntries(null).values().stream()
+                .filter(value -> !isTombstone(value))
+                .mapToInt(value -> 1)
+                .sum();
     }
 
     @Override
@@ -340,7 +313,9 @@ public class LSMTreeEngine implements StorageEngine {
                 
                 Map<String, String> merged = new LinkedHashMap<>();
                 for (SSTable sstable : toMerge) {
-                    merged.putAll(sstable.getAll());
+                    for (var entry : sstable.rawEntries().entrySet()) {
+                        merged.putIfAbsent(entry.getKey(), entry.getValue());
+                    }
                 }
                 
                 for (SSTable sstable : toMerge) {
@@ -364,7 +339,7 @@ public class LSMTreeEngine implements StorageEngine {
         
         try (var stream = Files.list(sstDir)) {
             var files = stream.filter(p -> p.toString().endsWith(".dat"))
-                    .sorted()
+                    .sorted(Comparator.reverseOrder())
                     .toList();
             
             for (Path file : files) {
@@ -422,6 +397,34 @@ public class LSMTreeEngine implements StorageEngine {
         return value != null && value.startsWith("__TOMBSTONE__");
     }
 
+    /**
+     * Reconciles the newest value for each key. The memtable is newest,
+     * followed by SSTables ordered newest to oldest.
+     */
+    private Map<String, String> visibleEntries(String prefix) {
+        Map<String, String> visible = new LinkedHashMap<>();
+        memtableLock.readLock().lock();
+        try {
+            for (var entry : memtable.entrySet()) {
+                if (prefix == null || entry.getKey().startsWith(prefix)) {
+                    visible.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } finally {
+            memtableLock.readLock().unlock();
+        }
+
+        for (SSTable sstable : sstables) {
+            for (var entry : sstable.rawEntries().entrySet()) {
+                if ((prefix == null || entry.getKey().startsWith(prefix))
+                        && !visible.containsKey(entry.getKey())) {
+                    visible.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        return visible;
+    }
+
     private String createTombstone() {
         return "__TOMBSTONE__" + System.currentTimeMillis();
     }
@@ -448,11 +451,20 @@ public class LSMTreeEngine implements StorageEngine {
         }
 
         public String get(String key) {
-            String value = data.get(key);
-            if (value != null && value.startsWith("__TOMBSTONE__")) {
-                return null;
-            }
-            return value;
+            String value = rawValue(key);
+            return value != null && value.startsWith("__TOMBSTONE__") ? null : value;
+        }
+
+        public boolean containsKey(String key) {
+            return data.containsKey(key);
+        }
+
+        public String rawValue(String key) {
+            return data.get(key);
+        }
+
+        public Map<String, String> rawEntries() {
+            return data;
         }
 
         public Set<String> keys(String prefix) {

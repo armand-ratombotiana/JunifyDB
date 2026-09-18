@@ -27,6 +27,21 @@ public class InMemoryEngine implements StorageEngine {
     }
 
     @Override
+    public boolean supportsTransactions() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsIndexes() {
+        return false;
+    }
+
+    @Override
+    public boolean isPersistent() {
+        return false;
+    }
+
+    @Override
     public void put(String collection, String key, String value) {
         store.computeIfAbsent(collection, k -> new ConcurrentHashMap<>()).put(key, value);
     }

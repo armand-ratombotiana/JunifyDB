@@ -50,6 +50,11 @@ public class BTreeEngine implements StorageEngine {
     }
 
     @Override
+    public boolean isPersistent() {
+        return true;
+    }
+
+    @Override
     public void put(String collection, String key, String value) {
         checkOpen();
         String compositeKey = compositeKey(collection, key);
